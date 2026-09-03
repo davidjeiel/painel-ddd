@@ -1,0 +1,152 @@
+# Catálogo Corporativo DDD
+
+Implementação em Python + SQLite da proposta consolidada de catálogo corporativo DDD:
+hierarquia de negócio governada, ativos técnicos desacoplados, ownership explícito,
+validação em etapas, revisões imutáveis, qualidade cadastral e painel executivo.
+
+O objetivo é o MVP descrito no roadmap da proposta (fases 1 e 2), pronto para o piloto
+de dois domínios, sem dependências além do Flask.
+
+## Como rodar
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+flask --app catalogo seed --reset   # cria o banco e carrega os dois domínios piloto
+python run.py                       # http://localhost:5000
+```
+
+Comandos disponíveis:
+
+| Comando | O que faz |
+| --- | --- |
+| `flask --app catalogo init-db` | Cria o schema e as políticas padrão |
+| `flask --app catalogo seed --reset` | Recria o banco com o cenário piloto |
+| `flask --app catalogo qualidade` | Recalcula o score de todos os ativos |
+| `flask --app catalogo snapshot` | Materializa os indicadores do mês |
+
+O banco fica em `dados/catalogo.db` (configurável pela variável `CATALOGO_DB`).
+
+## Telas
+
+Quatro experiências nucleares, como recomendado na proposta:
+
+- **Visão executiva** (`/`) — KPIs, cobertura por domínio, qualidade cadastral,
+  pendências prioritárias com drill-through e evolução mensal.
+- **Catálogo de ativos** (`/catalogo`) — busca, filtros persistentes por sessão,
+  status, criticidade e score.
+- **Wizard de cadastro** (`/ativo/novo`) — campos dinâmicos por tipo de ativo,
+  contexto herdado do pai e checklist do que a política exige.
+- **Visão 360°** (`/ativo/<id>`) — negócio, tecnologia, ownership, relações de entrada
+  e saída, evidências, revisões, auditoria e pré-check de publicação.
+- **Central de validações** (`/validacoes`) — fila priorizada por criticidade e SLA,
+  checklist de governança e decisão com parecer.
+- **Mapa DDD** (`/mapa`) — árvore Domínio → Subdomínio → Contexto → Capacidade com
+  cobertura de implementação.
+
+## Modelo de dados
+
+`ITEM_CATALOGO` é o núcleo comum: identidade, tipo, hierarquia, status de ciclo de vida,
+criticidade, vigência e revisão corrente. As particularidades de cada tipo ficam em
+`atributos` (JSON) e são declaradas em `catalogo/tipos.py`, o que mantém a semântica das
+entidades da proposta (Domínio, Subdomínio, Bounded Context, Capacidade, Sistema,
+Aplicação, Repositório, API, Endpoint, Base de dados, Objeto de dado, Evento) sem
+replicar a mecânica de governança em dezenas de tabelas.
+
+Ao redor do núcleo:
+
+- `RESPONSABILIDADE` — ownership por papel, com vigência.
+- `RELACIONAMENTO_ATIVO` — grafo tipado (implementa, expõe, consome, produz, depende de,
+  persiste em) com criticidade, mecanismo e origem da evidência.
+- `POLITICA_GOVERNANCA` — etapas de validação, evidência mínima, score mínimo, SLA e
+  periodicidade de revisão por tipo e criticidade.
+- `REVISAO_CATALOGO` — snapshot imutável com hash SHA-256 por publicação.
+- `VALIDACAO`, `EVIDENCIA`, `AUDITORIA_EVENTO`, `QUALIDADE_CATALOGO`.
+- `SNAPSHOT_INDICADOR` e as visões `vw_item_qualidade` e `vw_cobertura_capacidade`,
+  para a camada analítica consumir sem bater no modelo operacional.
+
+Detalhes em [`docs/MODELO.md`](docs/MODELO.md).
+
+## Regras de governança implementadas
+
+- **Ciclo de vida**: rascunho → em validação → publicado → em revisão →
+  descontinuado → arquivado, com transições validadas.
+- **Versão publicada é imutável**: alterar exige abrir revisão; cada publicação gera
+  uma nova revisão com hash e trilha de auditoria.
+- **Pré-check antes da submissão**: campos obrigatórios, hierarquia, ownership exigido,
+  duplicidade de nome, dependência circular, evidência mínima, relações com ativos fora
+  de vigência e score mínimo.
+- **Governança proporcional**: as etapas de validação vêm da política do tipo e da
+  criticidade — um endpoint não passa pelo mesmo rito de um contexto crítico.
+- **Rejeição devolve ao autor**: as demais etapas da revisão são canceladas.
+- **Descontinuação com impacto**: bloqueada quando há consumidores ativos de alta
+  criticidade, salvo confirmação de plano de migração.
+- **Qualidade cadastral**: score ponderado de completude, consistência, ownership,
+  evidência e temporalidade, com pendências acionáveis.
+
+## API interna
+
+```
+GET  /api/v1/itens?termo=&tipo_item=&status=
+POST /api/v1/itens
+GET  /api/v1/itens/<id>                 visão 360° completa
+GET  /api/v1/itens/<id>/qualidade
+GET  /api/v1/itens/<id>/precheck
+POST /api/v1/itens/<id>/submeter
+POST /api/v1/itens/<id>/relacoes
+GET  /api/v1/validacoes?etapa=
+POST /api/v1/validacoes/<id>
+GET  /api/v1/indicadores
+POST /api/v1/snapshots
+```
+
+## Descoberta automática
+
+`catalogo/integracoes.py` importa contratos OpenAPI (cria a API e seus endpoints) e
+inventários Git em JSON. Os itens descobertos nascem em rascunho com evidência de
+origem: a máquina traz o que é observável, a pessoa valida a semântica.
+
+```python
+from catalogo.integracoes import importar_openapi, importar_repositorios
+importar_openapi(con, "contratos/simulacao.json", id_aplicacao=13)
+importar_repositorios(con, "inventario-git.json", id_aplicacao=13)
+```
+
+## Testes
+
+```bash
+pip install pytest
+pytest -q
+```
+
+Cobrem hierarquia inválida, duplicidade, pré-check sem owner, fluxo completo até a
+publicação, imutabilidade do publicado, rejeição, dependência circular, bloqueio de
+descontinuação e evolução do score.
+
+## Estrutura
+
+```
+catalogo/
+  __init__.py      fábrica Flask e comandos de CLI
+  db.py            conexão e schema
+  schema.sql       modelo físico, visões e índices
+  tipos.py         taxonomia dos tipos de ativo e campos do wizard
+  qualidade.py     score de qualidade cadastral
+  governanca.py    políticas, pré-check, ciclo de vida e fila
+  servicos.py      casos de uso e consultas
+  integracoes.py   descoberta automática (OpenAPI, Git)
+  web.py           telas
+  api.py           API JSON
+  seed.py          carga dos dois domínios piloto
+docs/MODELO.md     modelo de dados e decisões
+tests/             testes das regras de governança
+```
+
+## O que ficou fora do MVP
+
+Grafo navegável interativo, RBAC por perfil, notificações, importação assistida em massa,
+integrações com CMDB/CI-CD/backlog e o modelo estrela completo para Power BI — todos
+previstos para as fases 4 e 5 do roadmap. As decisões abertas listadas na seção 12.1 da
+proposta (fonte de identidade de pessoas, granularidade mínima, sistema de registro
+operacional) continuam valendo antes da expansão corporativa.

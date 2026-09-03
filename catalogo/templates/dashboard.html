@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block titulo %}Visão executiva · Catálogo DDD{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Visão executiva</h1>
+  <p>Saúde do catálogo, cobertura de capacidades e pendências que precisam de ação.</p>
+</div>
+
+<div class="grade kpis">
+  <div class="kpi"><div class="rotulo">Domínios vigentes</div><div class="valor">{{ kpis.dominios }}</div></div>
+  <div class="kpi"><div class="rotulo">Capacidades</div><div class="valor">{{ kpis.capacidades }}</div></div>
+  <div class="kpi"><div class="rotulo">Cobertura média</div>
+    <div class="valor {{ 'bom' if kpis.cobertura >= 80 else 'alerta' }}">{{ kpis.cobertura }}%</div></div>
+  <div class="kpi"><div class="rotulo">Sem responsável</div>
+    <div class="valor {{ 'risco' if kpis.sem_owner else 'bom' }}">{{ kpis.sem_owner }}</div></div>
+  <div class="kpi"><div class="rotulo">APIs governadas</div>
+    <div class="valor {{ 'bom' if kpis.apis_governadas >= 80 else 'alerta' }}">{{ kpis.apis_governadas }}%</div></div>
+  <div class="kpi"><div class="rotulo">Pendências</div>
+    <div class="valor {{ 'alerta' if kpis.pendencias else 'bom' }}">{{ kpis.pendencias }}</div></div>
+</div>
+
+<div class="grade duas" style="margin-top:16px">
+  <div class="cartao">
+    <h2>Cobertura de capacidades por domínio</h2>
+    {% for linha in cobertura %}
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:13.5px">
+          <a href="{{ url_for('web.detalhe', id_item=linha.id_item) }}">{{ linha.nome }}</a>
+          <span class="discreto">{{ linha.cobertas }}/{{ linha.total }} · {{ linha.percentual }}%</span>
+        </div>
+        <div class="barra {{ 'baixa' if linha.percentual < 70 }}"><span style="width:{{ linha.percentual }}%"></span></div>
+      </div>
+    {% else %}
+      <p class="vazio">Nenhum domínio publicado ainda.</p>
+    {% endfor %}
+
+    <h3>Evolução mensal</h3>
+    {% if serie|length > 1 %}
+      {% set largura = 640 %}{% set altura = 150 %}
+      <svg class="grafico" viewBox="0 0 {{ largura }} {{ altura }}" role="img"
+           aria-label="Evolução mensal de cobertura e qualidade">
+        <line class="eixo" x1="0" y1="{{ altura - 20 }}" x2="{{ largura }}" y2="{{ altura - 20 }}"></line>
+        {% set passo = largura / (serie|length - 1) %}
+        <polyline class="linha" points="
+          {%- for p in serie %}{{ loop.index0 * passo }},{{ altura - 20 - (p.valor * (altura - 40) / 100) }} {% endfor -%}"></polyline>
+        {% if serie_qualidade|length == serie|length %}
+        <polyline class="linha secundaria" points="
+          {%- for p in serie_qualidade %}{{ loop.index0 * passo }},{{ altura - 20 - (p.valor * (altura - 40) / 100) }} {% endfor -%}"></polyline>
+        {% endif %}
+      </svg>
+      <p class="discreto">Azul: cobertura de capacidades. Roxo: qualidade cadastral média.
+         Última competência: {{ serie[-1].competencia }}.</p>
+    {% else %}
+      <p class="discreto">Rode <span class="mono">flask --app catalogo snapshot</span> para acumular a série mensal.</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="cartao">
+      <h2>Qualidade cadastral</h2>
+      <div class="valor" style="font-size:34px;font-weight:700">{{ kpis.qualidade_media }}%</div>
+      <div class="barra"><span style="width:{{ kpis.qualidade_media }}%"></span></div>
+      <p class="discreto">Média ponderada de completude, consistência, ownership,
+         evidência e temporalidade dos ativos avaliados.</p>
+    </div>
+
+    <div class="cartao">
+      <h2>Pendências prioritárias</h2>
+      <table>
+        <tbody>
+        {% for p in pendencias %}
+          <tr>
+            <td>{% if p.filtro.tipo_item %}
+                  <a href="{{ url_for('web.catalogo', tipo_item=p.filtro.tipo_item) }}">{{ p.titulo }}</a>
+                {% elif p.filtro.destino %}
+                  <a href="{{ url_for('web.validacoes') }}">{{ p.titulo }}</a>
+                {% else %}{{ p.titulo }}{% endif %}</td>
+            <td style="text-align:right"><strong class="{{ 'score ruim' if p.total else 'score bom' }}">{{ p.total }}</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cartao">
+      <h2>Fila de validação</h2>
+      {% for v in fila %}
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13.5px">
+          <a href="{{ url_for('web.validacoes', id_validacao=v.id_validacao) }}">{{ v.nome }}</a>
+          <span class="discreto">{{ v.etapa }} · {{ v.prazo|sla }}</span>
+        </div>
+      {% else %}
+        <p class="discreto">Sem validações pendentes.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}Central de validações{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Central de validações</h1>
+  <p>Fila priorizada por criticidade e SLA, com o checklist de governança de cada revisão.</p>
+</div>
+
+<div class="grade kpis">
+  <div class="kpi"><div class="rotulo">Total pendente</div>
+    <div class="valor">{{ fila|length }}</div></div>
+  <div class="kpi"><div class="rotulo">Negociais</div>
+    <div class="valor">{{ contagem.get('negocial', 0) }}</div></div>
+  <div class="kpi"><div class="rotulo">Técnicas</div>
+    <div class="valor">{{ contagem.get('tecnica', 0) }}</div></div>
+  <div class="kpi"><div class="rotulo">Arquiteturais</div>
+    <div class="valor">{{ contagem.get('arquitetural', 0) }}</div></div>
+</div>
+
+<div class="abas" style="margin-top:18px">
+  <a href="{{ url_for('web.validacoes') }}" class="{{ 'ativo' if not etapa }}">Todas</a>
+  <a href="{{ url_for('web.validacoes', etapa='negocial') }}" class="{{ 'ativo' if etapa == 'negocial' }}">Negocial</a>
+  <a href="{{ url_for('web.validacoes', etapa='tecnica') }}" class="{{ 'ativo' if etapa == 'tecnica' }}">Técnica</a>
+  <a href="{{ url_for('web.validacoes', etapa='arquitetural') }}" class="{{ 'ativo' if etapa == 'arquitetural' }}">Arquitetural</a>
+</div>
+
+<div class="grade duas">
+  <div class="cartao">
+    <h2>Fila priorizada</h2>
+    <table>
+      <thead><tr><th>Ativo</th><th>Etapa</th><th>Criticidade</th><th>SLA</th><th></th></tr></thead>
+      <tbody>
+      {% for v in fila %}
+        <tr>
+          <td><a href="{{ url_for('web.detalhe', id_item=v.id_item) }}">{{ v.nome }}</a>
+              <div class="discreto">{{ v.tipo_item|rotulo_tipo }} · {{ v.squad or 'sem squad' }}</div></td>
+          <td>{{ v.etapa }}</td>
+          <td><span class="etiqueta {{ v.criticidade }}">{{ v.criticidade }}</span></td>
+          <td class="{{ 'score ruim' if v.prazo|sla == 'vencido' }}">{{ v.prazo|sla }}</td>
+          <td><a href="{{ url_for('web.validacoes', id_validacao=v.id_validacao, etapa=etapa) }}">Analisar</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="vazio">Fila vazia. Nada aguardando decisão.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cartao">
+    <h2>Resumo da validação</h2>
+    {% if detalhe %}
+      <p><strong>{{ detalhe.item.nome }}</strong><br>
+         <span class="mono discreto">{{ detalhe.item.codigo }} ·
+         etapa {{ detalhe.validacao.etapa }} · prazo {{ detalhe.validacao.prazo }}</span></p>
+      <p>{{ detalhe.item.descricao }}</p>
+      <ul class="lista-checagem">
+        {% for b in detalhe.precheck.bloqueios %}<li class="bloqueio">{{ b }}</li>{% endfor %}
+        {% for a in detalhe.precheck.alertas %}<li class="pendente">{{ a }}</li>{% endfor %}
+        {% if not detalhe.precheck.bloqueios %}<li class="ok">Pré-check sem bloqueios (score {{ detalhe.precheck.score }}%)</li>{% endif %}
+      </ul>
+      <form method="post" action="{{ url_for('web.decidir', id_validacao=detalhe.validacao.id_validacao) }}">
+        <div class="campo"><label for="parecer">Parecer</label>
+          <textarea id="parecer" name="parecer" placeholder="o que motivou a decisão"></textarea></div>
+        <div class="acoes">
+          <button type="submit" name="decisao" value="aprovar" class="aprovar">Aprovar</button>
+          <button type="submit" name="decisao" value="rejeitar" class="perigo">Rejeitar</button>
+          <a class="botao secundario" href="{{ url_for('web.detalhe', id_item=detalhe.item.id_item) }}">Ver visão 360°</a>
+        </div>
+      </form>
+    {% else %}
+      <p class="vazio">Escolha um item da fila para ver evidências, pendências e decidir.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

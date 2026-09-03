@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block titulo %}Novo ativo{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Novo ativo</h1>
+  <p>Cadastro guiado: os campos mudam conforme o tipo, e o item nasce como rascunho.</p>
+</div>
+
+{% if not tipo_item %}
+  <div class="cartao">
+    <h2>Escolha o tipo de ativo</h2>
+    {% for bloco, lista in blocos.items() %}
+      <h3>{{ bloco }}</h3>
+      <div class="acoes">
+        {% for t in lista %}
+          <a class="botao secundario" href="{{ url_for('web.novo_ativo', tipo_item=t.chave) }}">{{ t.rotulo }}</a>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  {% set t = TIPOS[tipo_item] %}
+  <div class="grade duas">
+    <div class="cartao">
+      <h2>{{ t.rotulo }}</h2>
+      <form method="post" action="{{ url_for('web.novo_ativo') }}">
+        <input type="hidden" name="tipo_item" value="{{ tipo_item }}">
+        <input type="hidden" name="acao" value="salvar">
+
+        <div class="campo">
+          <label for="nome">Nome do ativo</label>
+          <input type="text" id="nome" name="nome" required value="{{ form.nome or '' }}">
+        </div>
+
+        <div class="campo">
+          <label for="descricao">Descrição</label>
+          <textarea id="descricao" name="descricao">{{ form.descricao or '' }}</textarea>
+        </div>
+
+        <div class="linha-campos">
+          {% if t.pai %}
+          <div class="campo">
+            <label for="id_pai">{{ TIPOS[t.pai].rotulo }} (contexto herdado)</label>
+            <select id="id_pai" name="id_pai" required>
+              <option value="">Selecione</option>
+              {% for p in pais %}
+                <option value="{{ p.id_item }}">{{ p.nome }} ({{ p.codigo }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="campo">
+            <label for="id_squad">Squad responsável</label>
+            <select id="id_squad" name="id_squad">
+              <option value="">Definir depois</option>
+              {% for s in squads %}<option value="{{ s.id_squad }}">{{ s.nome }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="campo">
+            <label for="criticidade">Criticidade</label>
+            <select id="criticidade" name="criticidade">
+              {% for c in CRITICIDADES %}
+                <option value="{{ c }}" {{ 'selected' if c == 'media' }}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        {% if t.campos %}
+          <h3>Campos de {{ t.rotulo|lower }}</h3>
+          <div class="linha-campos">
+            {% for c in t.campos %}
+              <div class="campo">
+                <label for="attr_{{ c.nome }}">{{ c.rotulo }}{{ ' *' if c.obrigatorio }}</label>
+                {% if c.tipo == 'area' %}
+                  <textarea id="attr_{{ c.nome }}" name="attr_{{ c.nome }}"></textarea>
+                {% elif c.tipo == 'selecao' %}
+                  <select id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">
+                    <option value="">Selecione</option>
+                    {% for o in c.opcoes %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+                  </select>
+                {% elif c.tipo == 'url' %}
+                  <input type="url" id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">
+                {% else %}
+                  <input type="text" id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="acoes">
+          <button type="submit">Salvar rascunho</button>
+          <a class="botao secundario" href="{{ url_for('web.novo_ativo') }}">Trocar tipo</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="cartao">
+      <h2>O que vem depois</h2>
+      <ol class="discreto" style="padding-left:18px;line-height:1.9">
+        <li>Salvar o rascunho com os campos do tipo</li>
+        <li>Definir responsável negocial e técnico</li>
+        <li>Registrar relações (implementa, expõe, depende de)</li>
+        <li>Anexar as evidências exigidas pela política</li>
+        <li>Enviar para validação — o pré-check roda antes</li>
+      </ol>
+      <h3>Exigências deste tipo</h3>
+      <ul class="lista-checagem">
+        <li class="{{ 'pendente' if t.exige_owner_negocial else 'ok' }}">
+          Owner negocial {{ 'obrigatório' if t.exige_owner_negocial else 'opcional' }}</li>
+        <li class="{{ 'pendente' if t.exige_owner_tecnico else 'ok' }}">
+          Owner técnico {{ 'obrigatório' if t.exige_owner_tecnico else 'opcional' }}</li>
+        {% if t.pai %}<li class="pendente">Vínculo com {{ TIPOS[t.pai].rotulo }}</li>{% endif %}
+      </ul>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block titulo %}Catálogo de ativos{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Catálogo de ativos</h1>
+  <p>Consulta unificada com filtros persistentes, qualidade cadastral e ações por ativo.</p>
+</div>
+
+<div class="cartao">
+  <form method="get" class="linha-campos" style="align-items:end">
+    <div class="campo">
+      <label for="termo">Buscar</label>
+      <input type="search" id="termo" name="termo" value="{{ filtros.termo }}"
+             placeholder="nome, código ou descrição">
+    </div>
+    <div class="campo">
+      <label for="tipo_item">Tipo</label>
+      <select id="tipo_item" name="tipo_item">
+        <option value="">Todos</option>
+        {% for chave, t in TIPOS.items() %}
+          <option value="{{ chave }}" {{ 'selected' if filtros.tipo_item == chave }}>{{ t.rotulo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="">Todos</option>
+        {% for chave, rotulo in CICLO.items() %}
+          <option value="{{ chave }}" {{ 'selected' if filtros.status == chave }}>{{ rotulo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="id_squad">Squad</label>
+      <select id="id_squad" name="id_squad">
+        <option value="">Todas</option>
+        {% for s in squads %}
+          <option value="{{ s.id_squad }}" {{ 'selected' if filtros.id_squad == s.id_squad|string }}>{{ s.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="criticidade">Criticidade</label>
+      <select id="criticidade" name="criticidade">
+        <option value="">Todas</option>
+        {% for c in CRITICIDADES %}
+          <option value="{{ c }}" {{ 'selected' if filtros.criticidade == c }}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo acoes">
+      <button type="submit">Aplicar filtros</button>
+      <a class="botao secundario" href="{{ url_for('web.novo_ativo') }}">Novo ativo</a>
+    </div>
+  </form>
+</div>
+
+<div class="cartao">
+  <table>
+    <thead>
+      <tr><th>Ativo</th><th>Tipo</th><th>Contexto/pai</th><th>Squad</th>
+          <th>Status</th><th>Criticidade</th><th>Qualidade</th></tr>
+    </thead>
+    <tbody>
+    {% for i in itens %}
+      <tr>
+        <td>
+          <a href="{{ url_for('web.detalhe', id_item=i.id_item) }}">{{ i.nome }}</a>
+          <div class="mono discreto">{{ i.codigo }}</div>
+        </td>
+        <td>{{ i.tipo_item|rotulo_tipo }}</td>
+        <td>{{ i.pai_nome or '—' }}</td>
+        <td>{{ i.squad or '—' }}</td>
+        <td><span class="etiqueta {{ i.status_ciclo_vida }}">{{ i.status_ciclo_vida|rotulo_status }}</span></td>
+        <td><span class="etiqueta {{ i.criticidade }}">{{ i.criticidade }}</span></td>
+        <td>
+          {% set s = i.score or 0 %}
+          <span class="score {{ 'bom' if s >= 80 else ('medio' if s >= 60 else 'ruim') }}">{{ s }}%</span>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="vazio">Nenhum ativo corresponde a esses filtros.
+        <a href="{{ url_for('web.novo_ativo') }}">Cadastrar um ativo</a>.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="discreto">{{ itens|length }} ativo(s) listado(s).</p>
+</div>
+{% endblock %}

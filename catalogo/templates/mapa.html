@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Mapa DDD{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Mapa DDD</h1>
+  <p>Domínio → Subdomínio → Bounded Context → Capacidade, com cobertura de implementação.</p>
+</div>
+
+<div class="cartao">
+  {% for d in arvore %}
+    <h2><a href="{{ url_for('web.detalhe', id_item=d.id_item) }}">{{ d.nome }}</a>
+      <span class="etiqueta {{ d.status_ciclo_vida }}">{{ d.status_ciclo_vida|rotulo_status }}</span></h2>
+    <ul class="arvore">
+      {% for s in d.subdominios %}
+        <li>
+          <span class="no-raiz"><a href="{{ url_for('web.detalhe', id_item=s.id_item) }}">{{ s.nome }}</a></span>
+          <ul class="arvore">
+            {% for c in s.contextos %}
+              <li>
+                <a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
+                <span class="discreto">contexto</span>
+                <ul class="arvore">
+                  {% for cap in c.capacidades %}
+                    <li>
+                      <a href="{{ url_for('web.detalhe', id_item=cap.id_item) }}">{{ cap.nome }}</a>
+                      {% if cap.implementacoes %}
+                        <span class="etiqueta publicado">{{ cap.implementacoes }} implementação(ões)</span>
+                      {% else %}
+                        <span class="etiqueta alta">sem implementação</span>
+                      {% endif %}
+                    </li>
+                  {% else %}
+                    <li class="discreto">nenhuma capacidade cadastrada</li>
+                  {% endfor %}
+                </ul>
+              </li>
+            {% else %}
+              <li class="discreto">nenhum contexto cadastrado</li>
+            {% endfor %}
+          </ul>
+        </li>
+      {% else %}
+        <li class="discreto">nenhum subdomínio cadastrado</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="vazio">Nenhum domínio cadastrado. Comece pelo
+      <a href="{{ url_for('web.novo_ativo', tipo_item='dominio') }}">cadastro de domínio</a>.</p>
+  {% endfor %}
+</div>
+{% endblock %}

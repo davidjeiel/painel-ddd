@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block titulo %}{{ item.nome }} · Catálogo DDD{% endblock %}
+
+{% block conteudo %}
+{% set t = TIPOS[item.tipo_item] %}
+<div class="cabecalho">
+  <h1>{{ item.nome }}</h1>
+  <p class="mono">{{ item.codigo }} · {{ item.tipo_item|rotulo_tipo }} ·
+     {{ item.status_ciclo_vida|rotulo_status }}
+     {% if item.revisao_atual %}· revisão publicada #{{ revisoes[0].numero_revisao if revisoes }}{% endif %}</p>
+</div>
+
+<div class="grade kpis">
+  <div class="kpi"><div class="rotulo">{{ TIPOS[t.pai].rotulo if t.pai else 'Hierarquia' }}</div>
+    <div style="font-weight:600">
+      {% if item.pai_id %}<a href="{{ url_for('web.detalhe', id_item=item.pai_id) }}">{{ item.pai_nome }}</a>
+      {% else %}—{% endif %}</div></div>
+  <div class="kpi"><div class="rotulo">Squad</div><div style="font-weight:600">{{ item.squad or '—' }}</div></div>
+  <div class="kpi"><div class="rotulo">Criticidade</div>
+    <div><span class="etiqueta {{ item.criticidade }}">{{ item.criticidade }}</span></div></div>
+  <div class="kpi"><div class="rotulo">Qualidade</div>
+    {% set s = qualidade.score_total %}
+    <div class="valor {{ 'bom' if s >= 80 else ('alerta' if s >= 60 else 'risco') }}">{{ s }}%</div></div>
+  <div class="kpi"><div class="rotulo">Próxima revisão</div>
+    <div style="font-weight:600">{{ proxima_revisao or '—' }}</div></div>
+</div>
+
+<div class="grade duas" style="margin-top:16px">
+  <div>
+    <div class="cartao">
+      <h2>Resumo</h2>
+      <p>{{ item.descricao or 'Sem descrição registrada.' }}</p>
+      {% if item.atributos %}
+        <h3>Campos de {{ t.rotulo|lower }}</h3>
+        <table>
+          {% for c in t.campos %}
+            <tr><th style="width:38%">{{ c.rotulo }}</th>
+                <td>{{ item.atributos.get(c.nome) or '—' }}</td></tr>
+          {% endfor %}
+        </table>
+      {% endif %}
+    </div>
+
+    <div class="cartao">
+      <h2>Mapa de relações</h2>
+      {% if relacoes_saida or relacoes_entrada or filhos %}
+        <table>
+          <thead><tr><th>Direção</th><th>Relação</th><th>Ativo</th><th>Criticidade</th><th>Origem</th></tr></thead>
+          <tbody>
+          {% for r in relacoes_saida %}
+            <tr><td>saída</td><td>{{ r.tipo_relacao }}</td>
+                <td><a href="{{ url_for('web.detalhe', id_item=r.id_destino) }}">{{ r.nome }}</a>
+                    <span class="discreto">({{ r.tipo_item|rotulo_tipo }})</span></td>
+                <td><span class="etiqueta {{ r.criticidade }}">{{ r.criticidade }}</span></td>
+                <td class="discreto">{{ r.origem_evidencia }}</td></tr>
+          {% endfor %}
+          {% for r in relacoes_entrada %}
+            <tr><td>entrada</td><td>{{ r.tipo_relacao }}</td>
+                <td><a href="{{ url_for('web.detalhe', id_item=r.id_origem) }}">{{ r.nome }}</a>
+                    <span class="discreto">({{ r.tipo_item|rotulo_tipo }})</span></td>
+                <td><span class="etiqueta {{ r.criticidade }}">{{ r.criticidade }}</span></td>
+                <td class="discreto">{{ r.origem_evidencia }}</td></tr>
+          {% endfor %}
+          {% for f in filhos %}
+            <tr><td>filho</td><td>compõe</td>
+                <td><a href="{{ url_for('web.detalhe', id_item=f.id_item) }}">{{ f.nome }}</a>
+                    <span class="discreto">({{ f.tipo_item|rotulo_tipo }})</span></td>
+                <td>—</td><td class="discreto">hierarquia</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="vazio">Nenhuma relação registrada. Vincule este ativo a uma capacidade abaixo.</p>
+      {% endif %}
+
+      <h3>Registrar relação</h3>
+      <form method="post" action="{{ url_for('web.relacao', id_item=item.id_item) }}" class="linha-campos">
+        <div class="campo">
+          <label for="tipo_relacao">Tipo</label>
+          <select id="tipo_relacao" name="tipo_relacao">
+            {% for chave, rotulo in relacoes.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="id_destino">Ativo de destino</label>
+          <select id="id_destino" name="id_destino" required>
+            {% for c in candidatos %}
+              <option value="{{ c.id_item }}">{{ c.nome }} — {{ c.tipo_item|rotulo_tipo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="rel_criticidade">Criticidade</label>
+          <select id="rel_criticidade" name="criticidade">
+            {% for c in CRITICIDADES %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="campo acoes"><button type="submit" class="secundario">Adicionar relação</button></div>
+      </form>
+    </div>
+
+    <div class="cartao">
+      <h2>Responsáveis</h2>
+      <table>
+        <tbody>
+        {% for r in responsaveis %}
+          <tr><td>{{ r.papel.replace('_', ' ') }}</td><td>{{ r.nome }}</td>
+              <td class="discreto">desde {{ r.inicio_vigencia }}</td></tr>
+        {% else %}
+          <tr><td colspan="3" class="vazio">Sem responsável definido.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" action="{{ url_for('web.responsavel', id_item=item.id_item) }}" class="linha-campos">
+        <div class="campo">
+          <label for="papel">Papel</label>
+          <select id="papel" name="papel">
+            <option value="owner_negocial">Owner negocial</option>
+            <option value="owner_tecnico">Owner técnico</option>
+            <option value="arquiteto">Arquiteto</option>
+            <option value="mantenedor">Mantenedor</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="id_pessoa">Pessoa</label>
+          <select id="id_pessoa" name="id_pessoa">
+            {% for p in pessoas %}<option value="{{ p.id_pessoa }}">{{ p.nome }} ({{ p.perfil }})</option>{% endfor %}
+          </select>
+        </div>
+        <div class="campo acoes"><button type="submit" class="secundario">Definir responsável</button></div>
+      </form>
+    </div>
+
+    <div class="cartao">
+      <h2>Evidências</h2>
+      <table>
+        <tbody>
+        {% for e in evidencias %}
+          <tr><td>{{ e.tipo }}</td>
+              <td>{% if e.url %}<a href="{{ e.url }}">{{ e.titulo }}</a>{% else %}{{ e.titulo }}{% endif %}</td>
+              <td class="discreto">{{ e.origem }}</td></tr>
+        {% else %}
+          <tr><td colspan="3" class="vazio">Nenhuma evidência anexada.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" action="{{ url_for('web.evidencia', id_item=item.id_item) }}" class="linha-campos">
+        <div class="campo">
+          <label for="tipo_ev">Tipo</label>
+          <select id="tipo_ev" name="tipo">
+            <option value="adr">ADR</option><option value="openapi">Contrato OpenAPI</option>
+            <option value="repositorio">Repositório</option><option value="documento">Documento</option>
+            <option value="link">Link</option>
+          </select>
+        </div>
+        <div class="campo"><label for="titulo">Título</label>
+          <input type="text" id="titulo" name="titulo" required></div>
+        <div class="campo"><label for="url_ev">URL</label>
+          <input type="url" id="url_ev" name="url"></div>
+        <div class="campo acoes"><button type="submit" class="secundario">Anexar evidência</button></div>
+      </form>
+    </div>
+
+    <div class="cartao">
+      <h2>Histórico</h2>
+      <table>
+        <thead><tr><th>Revisão</th><th>Motivo</th><th>Autor</th><th>Publicada</th><th>Hash</th></tr></thead>
+        <tbody>
+        {% for r in revisoes %}
+          <tr><td>#{{ r.numero_revisao }}</td><td>{{ r.motivo or '—' }}</td><td>{{ r.criado_por }}</td>
+              <td>{{ r.publicada_em or 'em validação' }}</td><td class="mono">{{ r.hash }}</td></tr>
+        {% else %}
+          <tr><td colspan="5" class="vazio">Nenhuma revisão criada.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if revisoes|length > 1 %}
+        <p><a href="{{ url_for('web.comparar', id_item=item.id_item,
+              a=revisoes[1].numero_revisao, b=revisoes[0].numero_revisao) }}">
+              Comparar as duas últimas revisões</a></p>
+      {% endif %}
+
+      <h3>Auditoria</h3>
+      <table>
+        <tbody>
+        {% for a in auditoria[:10] %}
+          <tr><td class="discreto">{{ a.data_hora }}</td><td>{{ a.acao }}</td>
+              <td class="discreto">{{ a.usuario }} · {{ a.origem }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="cartao">
+      <h2>Pré-check de publicação</h2>
+      <p class="discreto">Política: {{ precheck.politica.etapas|join(' → ') }} ·
+         evidência mínima {{ precheck.politica.evidencia_minima }} ·
+         score mínimo {{ precheck.politica.score_minimo }}% ·
+         SLA {{ precheck.politica.sla_horas }}h</p>
+      <ul class="lista-checagem">
+        {% for b in precheck.bloqueios %}<li class="bloqueio">{{ b }}</li>{% endfor %}
+        {% for a in precheck.alertas %}<li class="pendente">{{ a }}</li>{% endfor %}
+        {% if precheck.aprovado and not precheck.alertas %}<li class="ok">Tudo pronto para publicar</li>{% endif %}
+        {% if precheck.aprovado and precheck.alertas %}<li class="ok">Sem bloqueios: pode ser submetido</li>{% endif %}
+      </ul>
+    </div>
+
+    <div class="cartao">
+      <h2>Ações</h2>
+      {% if item.status_ciclo_vida in ('rascunho', 'em_revisao') %}
+        <form method="post" action="{{ url_for('web.submeter', id_item=item.id_item) }}">
+          <div class="campo"><label for="motivo">Motivo da revisão</label>
+            <input type="text" id="motivo" name="motivo" placeholder="o que mudou e por quê"></div>
+          <button type="submit">Enviar para validação</button>
+        </form>
+      {% elif item.status_ciclo_vida == 'publicado' %}
+        <form method="post" action="{{ url_for('web.revisar', id_item=item.id_item) }}">
+          <button type="submit">Abrir revisão</button>
+        </form>
+        <p class="discreto">A versão publicada continua vigente durante a revisão.</p>
+      {% elif item.status_ciclo_vida == 'em_validacao' %}
+        <p class="discreto">Aguardando decisão na
+           <a href="{{ url_for('web.validacoes') }}">central de validações</a>.</p>
+      {% else %}
+        <p class="discreto">Ativo fora de uso, mantido para rastreabilidade.</p>
+      {% endif %}
+
+      {% if item.status_ciclo_vida in ('publicado', 'em_revisao') %}
+        <h3>Descontinuar</h3>
+        <p class="discreto">{{ impacto|length }} consumidor(es) ativo(s) seriam afetados.</p>
+        <form method="post" action="{{ url_for('web.descontinuar', id_item=item.id_item) }}">
+          <div class="campo"><label for="motivo_desc">Motivo</label>
+            <input type="text" id="motivo_desc" name="motivo" required></div>
+          <label><input type="checkbox" name="forcar"> Plano de migração acordado com os consumidores</label>
+          <div class="acoes" style="margin-top:10px">
+            <button type="submit" class="perigo">Descontinuar ativo</button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+
+    <div class="cartao">
+      <h2>Dimensões de qualidade</h2>
+      {% for chave in ['completude','consistencia','ownership','evidencia','temporalidade'] %}
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:13px">
+            <span>{{ chave }}</span><span class="discreto">{{ qualidade[chave] }}%</span></div>
+          <div class="barra {{ 'baixa' if qualidade[chave] < 70 }}">
+            <span style="width:{{ qualidade[chave] }}%"></span></div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if item.status_ciclo_vida in ('rascunho','em_revisao') %}
+    <div class="cartao">
+      <h2>Editar</h2>
+      <form method="post" action="{{ url_for('web.editar', id_item=item.id_item) }}">
+        <div class="campo"><label for="e_nome">Nome</label>
+          <input type="text" id="e_nome" name="nome" value="{{ item.nome }}" required></div>
+        <div class="campo"><label for="e_desc">Descrição</label>
+          <textarea id="e_desc" name="descricao">{{ item.descricao or '' }}</textarea></div>
+        <div class="campo"><label for="e_crit">Criticidade</label>
+          <select id="e_crit" name="criticidade">
+            {% for c in CRITICIDADES %}
+              <option value="{{ c }}" {{ 'selected' if c == item.criticidade }}>{{ c }}</option>
+            {% endfor %}
+          </select></div>
+        {% for c in t.campos %}
+          <div class="campo">
+            <label for="e_{{ c.nome }}">{{ c.rotulo }}</label>
+            {% if c.tipo == 'area' %}
+              <textarea id="e_{{ c.nome }}" name="attr_{{ c.nome }}">{{ item.atributos.get(c.nome, '') }}</textarea>
+            {% elif c.tipo == 'selecao' %}
+              <select id="e_{{ c.nome }}" name="attr_{{ c.nome }}">
+                <option value="">Selecione</option>
+                {% for o in c.opcoes %}
+                  <option value="{{ o }}" {{ 'selected' if item.atributos.get(c.nome) == o }}>{{ o }}</option>
+                {% endfor %}
+              </select>
+            {% else %}
+              <input type="text" id="e_{{ c.nome }}" name="attr_{{ c.nome }}"
+                     value="{{ item.atributos.get(c.nome, '') }}">
+            {% endif %}
+          </div>
+        {% endfor %}
+        <button type="submit" class="secundario">Salvar alterações</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Políticas de governança{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Políticas de governança</h1>
+  <p>Regras proporcionais por tipo e criticidade: etapas, evidência mínima, score e SLA.</p>
+</div>
+
+<div class="cartao">
+  <h2>Política por tipo de ativo</h2>
+  <table>
+    <thead><tr><th>Tipo</th><th>Criticidade</th><th>Etapas</th><th>Evidência mínima</th>
+               <th>Score mínimo</th><th>SLA</th><th>Revisão</th></tr></thead>
+    <tbody>
+    {% for p in politicas %}
+      <tr><td>{{ p.tipo_item|rotulo_tipo }}</td>
+          <td>{{ 'todas' if p.criticidade == '*' else p.criticidade }}</td>
+          <td>{{ p.etapas|join(' → ') }}</td>
+          <td>{{ p.evidencia_minima }}</td>
+          <td>{{ p.score_minimo }}%</td>
+          <td>{{ p.sla_horas }}h</td>
+          <td>{{ p.periodicidade_revisao_dias }} dias</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="cartao">
+  <h2>Matriz mínima de aprovação por tipo de mudança</h2>
+  <table>
+    <thead><tr><th>Mudança</th><th>Negocial</th><th>Técnica</th><th>Arquitetural</th></tr></thead>
+    <tbody>
+    {% for mudanca, regras in matriz.items() %}
+      <tr><td>{{ mudanca }}</td><td>{{ regras.negocial }}</td>
+          <td>{{ regras.tecnica }}</td><td>{{ regras.arquitetural }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

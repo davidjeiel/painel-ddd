@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block titulo %}Comparar revisões{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Revisão #{{ a }} vs #{{ b }}</h1>
+  <p>{{ item['nome'] }} — <span class="mono">{{ item['codigo'] }}</span></p>
+</div>
+
+<div class="cartao">
+  {% if diff %}
+    <table>
+      <thead><tr><th>Campo</th><th>Revisão #{{ a }}</th><th>Revisão #{{ b }}</th></tr></thead>
+      <tbody>
+      {% for campo, valores in diff.items() %}
+        <tr><td>{{ campo }}</td><td class="mono">{{ valores.antes }}</td>
+            <td class="mono">{{ valores.depois }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="vazio">Nenhuma diferença entre as revisões escolhidas.</p>
+  {% endif %}
+  <p><a href="{{ url_for('web.detalhe', id_item=id_item) }}">Voltar ao ativo</a></p>
+</div>
+{% endblock %}
