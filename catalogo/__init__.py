@@ -28,6 +28,9 @@ def create_app(config: dict | None = None) -> Flask:
 
     banco.registrar(app)
 
+    with app.app_context():
+        banco.init_db()
+
     from . import api, web
     app.register_blueprint(web.bp)
     app.register_blueprint(api.bp)
