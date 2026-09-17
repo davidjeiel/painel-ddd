@@ -124,6 +124,28 @@ RELACOES = {
     "persiste_em": "persiste em",
 }
 
+# Tipos de destino que fazem sentido para cada relação. A lista orienta o
+# formulário — "implementa" propõe capacidades, não endpoints — sem virar
+# proibição: o catálogo real tem exceções e quem cadastra pode ver todos.
+DESTINOS_SUGERIDOS: dict[str, tuple] = {
+    "implementa": ("capacidade",),
+    "expoe": ("api", "endpoint", "evento"),
+    "consome": ("api", "endpoint", "evento", "objeto_dado"),
+    "produz": ("evento", "objeto_dado"),
+    "depende_de": ("dominio", "subdominio", "contexto", "capacidade", "sistema",
+                   "aplicacao", "api", "base_dados"),
+    "persiste_em": ("base_dados", "objeto_dado"),
+}
+
+# Como a relação acontece na prática — a pergunta que o time técnico responde.
+MECANISMOS = {
+    "sincrono": "Síncrono (HTTP/RPC)",
+    "assincrono": "Assíncrono (evento/fila)",
+    "batch": "Batch (job agendado)",
+    "arquivo": "Arquivo (troca de arquivos)",
+    "biblioteca": "Biblioteca compartilhada",
+}
+
 CICLO_VIDA = {
     "rascunho": "Rascunho",
     "em_validacao": "Em validação",

@@ -27,10 +27,17 @@ SECOES = {
     "web.comparar": "catalogo",
     "web.mapa": "mapa",
     "web.novo_ativo": "novo",
+    "web.meu_trabalho": "mesa",
     "web.validacoes": "validacoes",
     "web.decidir": "validacoes",
+    "web.assumir": "validacoes",
+    "web.liberar": "validacoes",
     "web.politicas": "politicas",
 }
+
+# Abas da visão 360°: leitura de um lado, escrita dentro da aba a que pertence.
+ABAS_ATIVO = [("resumo", "Resumo"), ("relacoes", "Relações"), ("pessoas", "Pessoas"),
+              ("evidencias", "Evidências"), ("historico", "Histórico")]
 
 # Filtros do catálogo, com o rótulo usado nos chips de filtro ativo.
 FILTROS_CATALOGO = {
@@ -251,8 +258,13 @@ def novo_ativo():
             "AND status_ciclo_vida NOT IN ('descontinuado','arquivado') ORDER BY nome",
             (tipos.tipo(tipo_item).pai,))]
     squads = [dict(l) for l in con.execute("SELECT * FROM squad ORDER BY nome")]
+    # o rito do tipo escolhido já é conhecido antes de salvar: mostrar agora
+    # evita a descoberta dos requisitos um erro de cada vez
+    politica = (governanca.politica(con, tipo_item,
+                                    request.values.get("criticidade", "media"))
+                if tipo_item in tipos.TIPOS else None)
     return render_template("wizard.html", tipo_item=tipo_item, pais=pais,
-                           squads=squads, blocos=tipos.blocos(),
+                           squads=squads, blocos=tipos.blocos(), politica=politica,
                            form=request.form, valores=request.values)
 
 
@@ -263,14 +275,23 @@ def detalhe(id_item: int):
     dados = servicos.visao_360(con, id_item)
     pessoas = [dict(l) for l in con.execute(
         "SELECT id_pessoa, nome, perfil FROM pessoa WHERE ativo = 1 ORDER BY nome")]
-    candidatos = [dict(l) for l in con.execute(
-        "SELECT id_item, codigo, nome, tipo_item FROM item_catalogo "
-        "WHERE id_item <> ? AND status_ciclo_vida NOT IN ('arquivado') "
-        "ORDER BY tipo_item, nome LIMIT 300", (id_item,))]
+    candidatos = [{**dict(l), "tipo_rotulo": rotulo_tipo(l["tipo_item"])}
+                  for l in con.execute(
+                      "SELECT id_item, codigo, nome, tipo_item FROM item_catalogo "
+                      "WHERE id_item <> ? AND status_ciclo_vida NOT IN ('arquivado') "
+                      "ORDER BY tipo_item, nome LIMIT 300", (id_item,))]
+    checagem = governanca.pre_check(con, id_item)
+    aba = request.args.get("aba", "resumo")
+    if aba not in dict(ABAS_ATIVO):
+        aba = "resumo"
     return render_template("detalhe.html", **dados, pessoas=pessoas,
                            candidatos=candidatos, relacoes=tipos.RELACOES,
+                           destinos=tipos.DESTINOS_SUGERIDOS,
+                           mecanismos=tipos.MECANISMOS,
                            trilha=servicos.trilha(con, id_item),
-                           precheck=governanca.pre_check(con, id_item))
+                           abas=ABAS_ATIVO, aba=aba,
+                           caminho=governanca.caminho_publicacao(con, id_item, checagem),
+                           precheck=checagem)
 
 
 @bp.route("/ativo/<int:id_item>/editar", methods=["POST"])
@@ -301,13 +322,17 @@ def responsavel(id_item: int):
     servicos.definir_responsavel(get_db(), id_item, int(request.form["id_pessoa"]),
                                  request.form["papel"], usuario_atual())
     flash("Responsável atualizado.", "ok")
-    return redirect(url_for("web.detalhe", id_item=id_item))
+    return redirect(url_for("web.detalhe", id_item=id_item, aba="pessoas"))
 
 
 @bp.route("/ativo/<int:id_item>/relacao", methods=["POST"])
 def relacao(id_item: int):
+    destino = request.form.get("id_destino", "").strip()
+    if not destino.isdigit():
+        flash("Escolha um ativo de destino na lista.", "erro")
+        return redirect(url_for("web.detalhe", id_item=id_item, aba="relacoes"))
     try:
-        servicos.relacionar(get_db(), id_item, int(request.form["id_destino"]),
+        servicos.relacionar(get_db(), id_item, int(destino),
                             request.form["tipo_relacao"],
                             request.form.get("criticidade", "media"),
                             request.form.get("mecanismo") or None,
@@ -315,7 +340,7 @@ def relacao(id_item: int):
         flash("Relação registrada.", "ok")
     except servicos.RegraDeNegocio as erro:
         flash(str(erro), "erro")
-    return redirect(url_for("web.detalhe", id_item=id_item))
+    return redirect(url_for("web.detalhe", id_item=id_item, aba="relacoes"))
 
 
 @bp.route("/ativo/<int:id_item>/evidencia", methods=["POST"])
@@ -324,7 +349,7 @@ def evidencia(id_item: int):
                               request.form["titulo"], request.form.get("url"),
                               usuario=usuario_atual())
     flash("Evidência anexada.", "ok")
-    return redirect(url_for("web.detalhe", id_item=id_item))
+    return redirect(url_for("web.detalhe", id_item=id_item, aba="evidencias"))
 
 
 @bp.route("/ativo/<int:id_item>/submeter", methods=["POST"])
@@ -385,42 +410,92 @@ def comparar(id_item: int):
 def validacoes():
     con = get_db()
     etapa = request.args.get("etapa", "")
-    fila = governanca.fila_validacao(con, etapa or None)
+    minhas = bool(request.args.get("minhas"))
+    fila = governanca.fila_validacao(
+        con, etapa or None, atribuido_a=usuario_atual() if minhas else None)
     contagem = {e["etapa"]: e["total"] for e in con.execute(
         "SELECT etapa, COUNT(*) total FROM validacao WHERE situacao = 'pendente' "
         "GROUP BY etapa")}
+    contagem["minhas"] = len(governanca.fila_validacao(con, atribuido_a=usuario_atual()))
     selecionado = request.args.get("id_validacao", type=int)
     detalhe_val = None
     if selecionado:
         val = con.execute("SELECT * FROM validacao WHERE id_validacao = ?",
                           (selecionado,)).fetchone()
         if val:
-            detalhe_val = {"validacao": dict(val),
-                           "precheck": governanca.pre_check(con, val["id_item"]),
-                           "item": dict(con.execute(
-                               "SELECT * FROM item_catalogo WHERE id_item = ?",
-                               (val["id_item"],)).fetchone())}
+            id_item = val["id_item"]
+            detalhe_val = {
+                "validacao": dict(val),
+                "precheck": governanca.pre_check(con, id_item),
+                "item": dict(con.execute(
+                    "SELECT * FROM item_catalogo WHERE id_item = ?", (id_item,)).fetchone()),
+                "trilha": servicos.trilha(con, id_item),
+                "mudancas": servicos.diff_da_revisao(con, id_item, val["id_revisao"]),
+                "evidencias": [dict(l) for l in con.execute(
+                    "SELECT * FROM evidencia WHERE id_item = ? "
+                    "ORDER BY id_evidencia DESC", (id_item,))],
+                "responsaveis": [dict(l) for l in con.execute(
+                    "SELECT r.papel, p.nome FROM responsabilidade r "
+                    "JOIN pessoa p ON p.id_pessoa = r.id_pessoa "
+                    "WHERE r.id_item = ? AND r.fim_vigencia IS NULL", (id_item,))],
+            }
     return render_template("validacoes.html", fila=fila, contagem=contagem,
-                           etapa=etapa, detalhe=detalhe_val)
+                           etapa=etapa, minhas=minhas, detalhe=detalhe_val)
+
+
+def _proxima_da_fila(con, etapa: str, decidida: int) -> int | None:
+    """Próximo item pendente da mesma aba, para o validador não voltar à lista."""
+    for v in governanca.fila_validacao(con, etapa or None):
+        if v["id_validacao"] != decidida:
+            return v["id_validacao"]
+    return None
+
+
+@bp.route("/validacoes/<int:id_validacao>/assumir", methods=["POST"])
+def assumir(id_validacao: int):
+    resultado = governanca.assumir_validacao(get_db(), id_validacao, usuario_atual())
+    flash("Validação assumida por você." if resultado["assumida"]
+          else resultado["motivo"], "ok" if resultado["assumida"] else "erro")
+    return redirect(url_for("web.validacoes", etapa=request.form.get("etapa", ""),
+                            id_validacao=id_validacao))
+
+
+@bp.route("/validacoes/<int:id_validacao>/liberar", methods=["POST"])
+def liberar(id_validacao: int):
+    governanca.liberar_validacao(get_db(), id_validacao, usuario_atual())
+    flash("Validação devolvida à fila livre.", "ok")
+    return redirect(url_for("web.validacoes", etapa=request.form.get("etapa", ""),
+                            id_validacao=id_validacao))
 
 
 @bp.route("/validacoes/<int:id_validacao>/decidir", methods=["POST"])
 def decidir(id_validacao: int):
     con = get_db()
+    etapa = request.form.get("etapa", "")
     aprovar = request.form["decisao"] == "aprovar"
+    seguir = bool(request.form.get("seguir"))
+    proxima = _proxima_da_fila(con, etapa, id_validacao) if seguir else None
     try:
         resultado = servicos.decidir_validacao(
             con, id_validacao, aprovar, request.form.get("parecer", ""), usuario_atual())
     except servicos.RegraDeNegocio as erro:
         flash(str(erro), "erro")
-        return redirect(url_for("web.validacoes"))
+        return redirect(url_for("web.validacoes", etapa=etapa))
     if resultado["publicado"]:
         flash("Todas as etapas aprovadas: nova revisão publicada.", "ok")
     elif aprovar:
         flash(f"Etapa aprovada. Restam {resultado['pendentes']} etapa(s).", "ok")
     else:
         flash("Revisão rejeitada e devolvida ao autor como rascunho.", "ok")
-    return redirect(url_for("web.validacoes"))
+    if seguir and proxima is None:
+        flash("Fila vazia: nada mais aguardando decisão nesta aba.", "ok")
+    return redirect(url_for("web.validacoes", etapa=etapa, id_validacao=proxima))
+
+
+@bp.route("/meu-trabalho")
+def meu_trabalho():
+    con = get_db()
+    return render_template("mesa.html", **servicos.minha_mesa(con, usuario_atual()))
 
 
 @bp.route("/politicas")

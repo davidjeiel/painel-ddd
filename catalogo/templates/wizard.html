@@ -122,7 +122,21 @@
         <li class="{{ 'pendente' if t.exige_owner_tecnico else 'ok' }}">
           Owner técnico {{ 'obrigatório' if t.exige_owner_tecnico else 'opcional' }}</li>
         {% if t.pai %}<li class="pendente">Vínculo com {{ TIPOS[t.pai].rotulo }}</li>{% endif %}
+        {% for c in t.campos if c.obrigatorio %}
+          <li class="pendente">{{ c.rotulo }} é obrigatório para publicar</li>
+        {% endfor %}
       </ul>
+
+      {% if politica %}
+        <h3>Rito de publicação</h3>
+        <p class="discreto">Pelas políticas vigentes, um ativo deste tipo com criticidade
+          <strong>{{ valores.get('criticidade') or 'media' }}</strong> passa por
+          <strong>{{ politica.etapas|join(' → ') }}</strong>, exige
+          <strong>{{ politica.evidencia_minima }}</strong> evidência(s), score mínimo de
+          <strong>{{ politica.score_minimo }}%</strong> e tem SLA de
+          {{ politica.sla_horas }}h por etapa. A revisão é reavaliada a cada
+          {{ politica.periodicidade_revisao_dias }} dias.</p>
+      {% endif %}
     </div>
   </div>
 

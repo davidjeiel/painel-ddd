@@ -27,185 +27,328 @@
     <div style="font-weight:600">{{ proxima_revisao or '—' }}</div></div>
 </div>
 
+{# ------------------------------------------------ P08: caminho até publicar #}
+{% if item.status_ciclo_vida in ('rascunho', 'em_revisao') %}
+<div class="cartao caminho">
+  <div class="caminho-cabeca">
+    <h2>Caminho até a publicação</h2>
+    <span class="progresso {{ 'completo' if caminho.aprovado }}">
+      {{ caminho.concluidos }} de {{ caminho.total }}</span>
+  </div>
+  <ol class="passos">
+    {% for p in caminho.passos %}
+      <li class="{{ 'ok' if p.ok else 'pendente' }}">
+        <a href="{{ url_for('web.detalhe', id_item=item.id_item, aba=p.aba) }}">{{ p.rotulo }}</a>
+        {% if p.ok %}
+          <span class="dica">{{ p.meta }}</span>
+        {% else %}
+          <ul class="falta">
+            {% for f in p.pendencias %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}
+
 <div class="grade duas" style="margin-top:16px">
   <div>
-    <div class="cartao">
-      <h2>Resumo</h2>
-      <p>{{ item.descricao or 'Sem descrição registrada.' }}</p>
-      {% if item.atributos %}
-        <h3>Campos de {{ t.rotulo|lower }}</h3>
-        <table>
-          {% for c in t.campos %}
-            <tr><th style="width:38%">{{ c.rotulo }}</th>
-                <td>{{ item.atributos.get(c.nome) or '—' }}</td></tr>
-          {% endfor %}
-        </table>
-      {% endif %}
+    {# ------------------------------------------------------ P07: abas #}
+    <div class="abas" role="tablist">
+      {% for chave, rotulo in abas %}
+        <a href="{{ url_for('web.detalhe', id_item=item.id_item, aba=chave) }}"
+           class="{{ 'ativo' if aba == chave }}" data-aba="{{ chave }}" role="tab"
+           aria-selected="{{ 'true' if aba == chave else 'false' }}">{{ rotulo }}
+          {%- if chave == 'relacoes' %} <span class="conta">{{ relacoes_saida|length + relacoes_entrada|length + filhos|length }}</span>
+          {%- elif chave == 'pessoas' %} <span class="conta">{{ responsaveis|length }}</span>
+          {%- elif chave == 'evidencias' %} <span class="conta">{{ evidencias|length }}</span>
+          {%- elif chave == 'historico' %} <span class="conta">{{ revisoes|length }}</span>
+          {%- endif %}</a>
+      {% endfor %}
     </div>
 
-    <div class="cartao">
-      <h2>Mapa de relações</h2>
-      {% if relacoes_saida or relacoes_entrada or filhos %}
+    <!-- ------------------------------------------------------------ resumo -->
+    <section class="painel-aba" id="painel-resumo" {{ 'hidden' if aba != 'resumo' }}>
+      <div class="cartao">
+        <h2>Resumo</h2>
+        <p>{{ item.descricao or 'Sem descrição registrada.' }}</p>
+        {% if item.atributos %}
+          <h3>Campos de {{ t.rotulo|lower }}</h3>
+          <table>
+            {% for c in t.campos %}
+              <tr><th scope="row" style="width:38%">{{ c.rotulo }}</th>
+                  <td>{{ item.atributos.get(c.nome) or '—' }}</td></tr>
+            {% endfor %}
+          </table>
+        {% endif %}
+      </div>
+
+      {% if item.status_ciclo_vida in ('rascunho','em_revisao') %}
+      <details class="escrever">
+        <summary>Editar nome, descrição e campos do tipo</summary>
+        <form method="post" action="{{ url_for('web.editar', id_item=item.id_item) }}">
+          <div class="campo"><label for="e_nome">Nome</label>
+            <input type="text" id="e_nome" name="nome" value="{{ item.nome }}" required></div>
+          <div class="campo"><label for="e_desc">Descrição</label>
+            <textarea id="e_desc" name="descricao">{{ item.descricao or '' }}</textarea></div>
+          <div class="campo"><label for="e_crit">Criticidade</label>
+            <select id="e_crit" name="criticidade">
+              {% for c in CRITICIDADES %}
+                <option value="{{ c }}" {{ 'selected' if c == item.criticidade }}>{{ c }}</option>
+              {% endfor %}
+            </select></div>
+          {% for c in t.campos %}
+            <div class="campo">
+              <label for="e_{{ c.nome }}">{{ c.rotulo }}</label>
+              {% if c.tipo == 'area' %}
+                <textarea id="e_{{ c.nome }}" name="attr_{{ c.nome }}">{{ item.atributos.get(c.nome, '') }}</textarea>
+              {% elif c.tipo == 'selecao' %}
+                <select id="e_{{ c.nome }}" name="attr_{{ c.nome }}">
+                  <option value="">Selecione</option>
+                  {% for o in c.opcoes %}
+                    <option value="{{ o }}" {{ 'selected' if item.atributos.get(c.nome) == o }}>{{ o }}</option>
+                  {% endfor %}
+                </select>
+              {% else %}
+                <input type="text" id="e_{{ c.nome }}" name="attr_{{ c.nome }}"
+                       value="{{ item.atributos.get(c.nome, '') }}">
+              {% endif %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="secundario">Salvar alterações</button>
+        </form>
+      </details>
+      {% endif %}
+    </section>
+
+    <!-- ---------------------------------------------------------- relações -->
+    <section class="painel-aba" id="painel-relacoes" {{ 'hidden' if aba != 'relacoes' }}>
+      <div class="cartao">
+        <h2>Mapa de relações</h2>
+        {% if relacoes_saida or relacoes_entrada or filhos %}
+          <table>
+            <thead><tr><th scope="col">Direção</th><th scope="col">Relação</th>
+                       <th scope="col">Ativo</th><th scope="col">Mecanismo</th>
+                       <th scope="col">Criticidade</th><th scope="col">Origem</th></tr></thead>
+            <tbody>
+            {% for r in relacoes_saida %}
+              <tr><td>saída</td><td>{{ r.tipo_relacao }}</td>
+                  <td><a href="{{ url_for('web.detalhe', id_item=r.id_destino) }}">{{ r.nome }}</a>
+                      <span class="discreto">({{ r.tipo_item|rotulo_tipo }})</span></td>
+                  <td class="discreto">{{ r.mecanismo or '—' }}</td>
+                  <td><span class="etiqueta {{ r.criticidade }}">{{ r.criticidade }}</span></td>
+                  <td class="discreto">{{ r.origem_evidencia }}</td></tr>
+            {% endfor %}
+            {% for r in relacoes_entrada %}
+              <tr><td>entrada</td><td>{{ r.tipo_relacao }}</td>
+                  <td><a href="{{ url_for('web.detalhe', id_item=r.id_origem) }}">{{ r.nome }}</a>
+                      <span class="discreto">({{ r.tipo_item|rotulo_tipo }})</span></td>
+                  <td class="discreto">{{ r.mecanismo or '—' }}</td>
+                  <td><span class="etiqueta {{ r.criticidade }}">{{ r.criticidade }}</span></td>
+                  <td class="discreto">{{ r.origem_evidencia }}</td></tr>
+            {% endfor %}
+            {% for f in filhos %}
+              <tr><td>filho</td><td>compõe</td>
+                  <td><a href="{{ url_for('web.detalhe', id_item=f.id_item) }}">{{ f.nome }}</a>
+                      <span class="discreto">({{ f.tipo_item|rotulo_tipo }})</span></td>
+                  <td class="discreto">—</td><td>—</td><td class="discreto">hierarquia</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="vazio">Nenhuma relação registrada. Vincule este ativo a uma capacidade abaixo.</p>
+        {% endif %}
+      </div>
+
+      {# ----------------------------------- P11: seletor com busca e mecanismo #}
+      <details class="escrever" {{ 'open' if not (relacoes_saida or relacoes_entrada) }}>
+        <summary>Registrar relação</summary>
+        <form method="post" action="{{ url_for('web.relacao', id_item=item.id_item) }}"
+              id="form-relacao" autocomplete="off">
+          <div class="linha-campos">
+            <div class="campo">
+              <label for="tipo_relacao">Tipo de relação</label>
+              <select id="tipo_relacao" name="tipo_relacao">
+                {% for chave, rotulo in relacoes.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo combo">
+              <label for="destino-busca">Ativo de destino</label>
+              <input type="text" id="destino-busca" placeholder="digite o nome ou o código"
+                     role="combobox" aria-expanded="false" aria-controls="destino-lista"
+                     aria-describedby="destino-escolhido">
+              <input type="hidden" name="id_destino" id="id_destino" value="">
+              <ul id="destino-lista" class="sugestoes" role="listbox" hidden></ul>
+              <div id="destino-escolhido" class="discreto">Nenhum ativo escolhido.</div>
+            </div>
+            <div class="campo">
+              <label for="mecanismo">Mecanismo</label>
+              <select id="mecanismo" name="mecanismo">
+                <option value="">Não informado</option>
+                {% for chave, rotulo in mecanismos.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="campo">
+              <label for="rel_criticidade">Criticidade da relação</label>
+              <select id="rel_criticidade" name="criticidade">
+                {% for c in CRITICIDADES %}
+                  <option value="{{ c }}" {{ 'selected' if c == 'media' }}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="acoes">
+            <button type="submit" class="secundario">Adicionar relação</button>
+            <label class="inline"><input type="checkbox" id="todos-tipos">
+              Mostrar ativos de qualquer tipo</label>
+          </div>
+        </form>
+      </details>
+    </section>
+
+    <!-- ----------------------------------------------------------- pessoas -->
+    <section class="painel-aba" id="painel-pessoas" {{ 'hidden' if aba != 'pessoas' }}>
+      <div class="cartao">
+        <h2>Responsáveis</h2>
         <table>
-          <thead><tr><th>Direção</th><th>Relação</th><th>Ativo</th><th>Criticidade</th><th>Origem</th></tr></thead>
           <tbody>
-          {% for r in relacoes_saida %}
-            <tr><td>saída</td><td>{{ r.tipo_relacao }}</td>
-                <td><a href="{{ url_for('web.detalhe', id_item=r.id_destino) }}">{{ r.nome }}</a>
-                    <span class="discreto">({{ r.tipo_item|rotulo_tipo }})</span></td>
-                <td><span class="etiqueta {{ r.criticidade }}">{{ r.criticidade }}</span></td>
-                <td class="discreto">{{ r.origem_evidencia }}</td></tr>
-          {% endfor %}
-          {% for r in relacoes_entrada %}
-            <tr><td>entrada</td><td>{{ r.tipo_relacao }}</td>
-                <td><a href="{{ url_for('web.detalhe', id_item=r.id_origem) }}">{{ r.nome }}</a>
-                    <span class="discreto">({{ r.tipo_item|rotulo_tipo }})</span></td>
-                <td><span class="etiqueta {{ r.criticidade }}">{{ r.criticidade }}</span></td>
-                <td class="discreto">{{ r.origem_evidencia }}</td></tr>
-          {% endfor %}
-          {% for f in filhos %}
-            <tr><td>filho</td><td>compõe</td>
-                <td><a href="{{ url_for('web.detalhe', id_item=f.id_item) }}">{{ f.nome }}</a>
-                    <span class="discreto">({{ f.tipo_item|rotulo_tipo }})</span></td>
-                <td>—</td><td class="discreto">hierarquia</td></tr>
+          {% for r in responsaveis %}
+            <tr><td>{{ r.papel.replace('_', ' ') }}</td><td>{{ r.nome }}</td>
+                <td class="discreto">desde {{ r.inicio_vigencia }}</td></tr>
+          {% else %}
+            <tr><td colspan="3" class="vazio">Sem responsável definido.</td></tr>
           {% endfor %}
           </tbody>
         </table>
-      {% else %}
-        <p class="vazio">Nenhuma relação registrada. Vincule este ativo a uma capacidade abaixo.</p>
-      {% endif %}
+        <p class="discreto">Este tipo exige
+          {{ 'owner negocial' if t.exige_owner_negocial }}{{ ' e ' if t.exige_owner_negocial and t.exige_owner_tecnico }}{{ 'owner técnico' if t.exige_owner_tecnico }}{{ 'nenhum papel obrigatório' if not (t.exige_owner_negocial or t.exige_owner_tecnico) }}.</p>
+      </div>
 
-      <h3>Registrar relação</h3>
-      <form method="post" action="{{ url_for('web.relacao', id_item=item.id_item) }}" class="linha-campos">
-        <div class="campo">
-          <label for="tipo_relacao">Tipo</label>
-          <select id="tipo_relacao" name="tipo_relacao">
-            {% for chave, rotulo in relacoes.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="campo">
-          <label for="id_destino">Ativo de destino</label>
-          <select id="id_destino" name="id_destino" required>
-            {% for c in candidatos %}
-              <option value="{{ c.id_item }}">{{ c.nome }} — {{ c.tipo_item|rotulo_tipo }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="campo">
-          <label for="rel_criticidade">Criticidade</label>
-          <select id="rel_criticidade" name="criticidade">
-            {% for c in CRITICIDADES %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="campo acoes"><button type="submit" class="secundario">Adicionar relação</button></div>
-      </form>
-    </div>
+      <details class="escrever" {{ 'open' if not responsaveis }}>
+        <summary>Definir responsável</summary>
+        <form method="post" action="{{ url_for('web.responsavel', id_item=item.id_item) }}"
+              class="linha-campos">
+          <div class="campo">
+            <label for="papel">Papel</label>
+            <select id="papel" name="papel">
+              <option value="owner_negocial">Owner negocial</option>
+              <option value="owner_tecnico">Owner técnico</option>
+              <option value="arquiteto">Arquiteto</option>
+              <option value="mantenedor">Mantenedor</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="id_pessoa">Pessoa</label>
+            <select id="id_pessoa" name="id_pessoa">
+              {% for p in pessoas %}<option value="{{ p.id_pessoa }}">{{ p.nome }} ({{ p.perfil }})</option>{% endfor %}
+            </select>
+          </div>
+          <div class="campo acoes"><button type="submit" class="secundario">Definir responsável</button></div>
+        </form>
+      </details>
+    </section>
 
-    <div class="cartao">
-      <h2>Responsáveis</h2>
-      <table>
-        <tbody>
-        {% for r in responsaveis %}
-          <tr><td>{{ r.papel.replace('_', ' ') }}</td><td>{{ r.nome }}</td>
-              <td class="discreto">desde {{ r.inicio_vigencia }}</td></tr>
-        {% else %}
-          <tr><td colspan="3" class="vazio">Sem responsável definido.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <form method="post" action="{{ url_for('web.responsavel', id_item=item.id_item) }}" class="linha-campos">
-        <div class="campo">
-          <label for="papel">Papel</label>
-          <select id="papel" name="papel">
-            <option value="owner_negocial">Owner negocial</option>
-            <option value="owner_tecnico">Owner técnico</option>
-            <option value="arquiteto">Arquiteto</option>
-            <option value="mantenedor">Mantenedor</option>
-          </select>
-        </div>
-        <div class="campo">
-          <label for="id_pessoa">Pessoa</label>
-          <select id="id_pessoa" name="id_pessoa">
-            {% for p in pessoas %}<option value="{{ p.id_pessoa }}">{{ p.nome }} ({{ p.perfil }})</option>{% endfor %}
-          </select>
-        </div>
-        <div class="campo acoes"><button type="submit" class="secundario">Definir responsável</button></div>
-      </form>
-    </div>
+    <!-- -------------------------------------------------------- evidências -->
+    <section class="painel-aba" id="painel-evidencias" {{ 'hidden' if aba != 'evidencias' }}>
+      <div class="cartao">
+        <h2>Evidências</h2>
+        <table>
+          <tbody>
+          {% for e in evidencias %}
+            <tr><td>{{ e.tipo }}</td>
+                <td>{% if e.url %}<a href="{{ e.url }}">{{ e.titulo }}</a>{% else %}{{ e.titulo }}{% endif %}</td>
+                <td class="discreto">{{ e.origem }}</td></tr>
+          {% else %}
+            <tr><td colspan="3" class="vazio">Nenhuma evidência anexada.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <p class="discreto">A política deste ativo exige
+          {{ precheck.politica.evidencia_minima }} evidência(s) para publicar.</p>
+      </div>
 
-    <div class="cartao">
-      <h2>Evidências</h2>
-      <table>
-        <tbody>
-        {% for e in evidencias %}
-          <tr><td>{{ e.tipo }}</td>
-              <td>{% if e.url %}<a href="{{ e.url }}">{{ e.titulo }}</a>{% else %}{{ e.titulo }}{% endif %}</td>
-              <td class="discreto">{{ e.origem }}</td></tr>
-        {% else %}
-          <tr><td colspan="3" class="vazio">Nenhuma evidência anexada.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <form method="post" action="{{ url_for('web.evidencia', id_item=item.id_item) }}" class="linha-campos">
-        <div class="campo">
-          <label for="tipo_ev">Tipo</label>
-          <select id="tipo_ev" name="tipo">
-            <option value="adr">ADR</option><option value="openapi">Contrato OpenAPI</option>
-            <option value="repositorio">Repositório</option><option value="documento">Documento</option>
-            <option value="link">Link</option>
-          </select>
-        </div>
-        <div class="campo"><label for="titulo">Título</label>
-          <input type="text" id="titulo" name="titulo" required></div>
-        <div class="campo"><label for="url_ev">URL</label>
-          <input type="url" id="url_ev" name="url"></div>
-        <div class="campo acoes"><button type="submit" class="secundario">Anexar evidência</button></div>
-      </form>
-    </div>
+      <details class="escrever" {{ 'open' if evidencias|length < precheck.politica.evidencia_minima }}>
+        <summary>Anexar evidência</summary>
+        <form method="post" action="{{ url_for('web.evidencia', id_item=item.id_item) }}"
+              class="linha-campos">
+          <div class="campo">
+            <label for="tipo_ev">Tipo</label>
+            <select id="tipo_ev" name="tipo">
+              <option value="adr">ADR</option><option value="openapi">Contrato OpenAPI</option>
+              <option value="repositorio">Repositório</option><option value="documento">Documento</option>
+              <option value="link">Link</option>
+            </select>
+          </div>
+          <div class="campo"><label for="titulo">Título</label>
+            <input type="text" id="titulo" name="titulo" required></div>
+          <div class="campo"><label for="url_ev">URL</label>
+            <input type="url" id="url_ev" name="url"></div>
+          <div class="campo acoes"><button type="submit" class="secundario">Anexar evidência</button></div>
+        </form>
+      </details>
+    </section>
 
-    <div class="cartao">
-      <h2>Histórico</h2>
-      <table>
-        <thead><tr><th>Revisão</th><th>Motivo</th><th>Autor</th><th>Publicada</th><th>Hash</th></tr></thead>
-        <tbody>
-        {% for r in revisoes %}
-          <tr><td>#{{ r.numero_revisao }}</td><td>{{ r.motivo or '—' }}</td><td>{{ r.criado_por }}</td>
-              <td>{{ r.publicada_em or 'em validação' }}</td><td class="mono">{{ r.hash }}</td></tr>
-        {% else %}
-          <tr><td colspan="5" class="vazio">Nenhuma revisão criada.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% if revisoes|length > 1 %}
-        <p><a href="{{ url_for('web.comparar', id_item=item.id_item,
-              a=revisoes[1].numero_revisao, b=revisoes[0].numero_revisao) }}">
-              Comparar as duas últimas revisões</a></p>
-      {% endif %}
+    <!-- --------------------------------------------------------- histórico -->
+    <section class="painel-aba" id="painel-historico" {{ 'hidden' if aba != 'historico' }}>
+      <div class="cartao">
+        <h2>Revisões</h2>
+        <table>
+          <thead><tr><th scope="col">Revisão</th><th scope="col">Motivo</th>
+                     <th scope="col">Autor</th><th scope="col">Publicada</th>
+                     <th scope="col">Hash</th></tr></thead>
+          <tbody>
+          {% for r in revisoes %}
+            <tr><td>#{{ r.numero_revisao }}</td><td>{{ r.motivo or '—' }}</td><td>{{ r.criado_por }}</td>
+                <td>{{ r.publicada_em or 'em validação' }}</td><td class="mono">{{ r.hash }}</td></tr>
+          {% else %}
+            <tr><td colspan="5" class="vazio">Nenhuma revisão criada.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if revisoes|length > 1 %}
+          <p><a href="{{ url_for('web.comparar', id_item=item.id_item,
+                a=revisoes[1].numero_revisao, b=revisoes[0].numero_revisao) }}">
+                Comparar as duas últimas revisões</a></p>
+        {% endif %}
+      </div>
 
-      <h3>Auditoria</h3>
-      <table>
-        <tbody>
-        {% for a in auditoria[:10] %}
-          <tr><td class="discreto">{{ a.data_hora }}</td><td>{{ a.acao }}</td>
-              <td class="discreto">{{ a.usuario }} · {{ a.origem }}</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+      <div class="cartao">
+        <h2>Auditoria</h2>
+        <table>
+          <tbody>
+          {% for a in auditoria[:15] %}
+            <tr><td class="discreto">{{ a.data_hora }}</td><td>{{ a.acao }}</td>
+                <td class="discreto">{{ a.usuario }} · {{ a.origem }}</td></tr>
+          {% else %}
+            <tr><td colspan="3" class="vazio">Sem eventos registrados.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <div>
+    {# Com o checklist visível, este cartão não repete os bloqueios: fica com o
+       rito da política e os alertas, que o checklist não cobre. #}
+    {% set em_edicao = item.status_ciclo_vida in ('rascunho', 'em_revisao') %}
     <div class="cartao">
-      <h2>Pré-check de publicação</h2>
+      <h2>{{ 'Rito e alertas' if em_edicao else 'Pré-check de publicação' }}</h2>
       <p class="discreto">Política: {{ precheck.politica.etapas|join(' → ') }} ·
          evidência mínima {{ precheck.politica.evidencia_minima }} ·
          score mínimo {{ precheck.politica.score_minimo }}% ·
          SLA {{ precheck.politica.sla_horas }}h</p>
       <ul class="lista-checagem">
-        {% for b in precheck.bloqueios %}<li class="bloqueio">{{ b }}</li>{% endfor %}
+        {% if not em_edicao %}
+          {% for b in precheck.bloqueios %}<li class="bloqueio">{{ b }}</li>{% endfor %}
+        {% endif %}
         {% for a in precheck.alertas %}<li class="pendente">{{ a }}</li>{% endfor %}
         {% if precheck.aprovado and not precheck.alertas %}<li class="ok">Tudo pronto para publicar</li>{% endif %}
         {% if precheck.aprovado and precheck.alertas %}<li class="ok">Sem bloqueios: pode ser submetido</li>{% endif %}
+        {% if em_edicao and not precheck.aprovado and not precheck.alertas %}
+          <li class="discreto">Os impedimentos estão no caminho até a publicação, acima.</li>
+        {% endif %}
       </ul>
     </div>
 
@@ -235,7 +378,8 @@
         <form method="post" action="{{ url_for('web.descontinuar', id_item=item.id_item) }}">
           <div class="campo"><label for="motivo_desc">Motivo</label>
             <input type="text" id="motivo_desc" name="motivo" required></div>
-          <label><input type="checkbox" name="forcar"> Plano de migração acordado com os consumidores</label>
+          <label class="inline"><input type="checkbox" name="forcar">
+            Plano de migração acordado com os consumidores</label>
           <div class="acoes" style="margin-top:10px">
             <button type="submit" class="perigo">Descontinuar ativo</button>
           </div>
@@ -254,43 +398,94 @@
         </div>
       {% endfor %}
     </div>
-
-    {% if item.status_ciclo_vida in ('rascunho','em_revisao') %}
-    <div class="cartao">
-      <h2>Editar</h2>
-      <form method="post" action="{{ url_for('web.editar', id_item=item.id_item) }}">
-        <div class="campo"><label for="e_nome">Nome</label>
-          <input type="text" id="e_nome" name="nome" value="{{ item.nome }}" required></div>
-        <div class="campo"><label for="e_desc">Descrição</label>
-          <textarea id="e_desc" name="descricao">{{ item.descricao or '' }}</textarea></div>
-        <div class="campo"><label for="e_crit">Criticidade</label>
-          <select id="e_crit" name="criticidade">
-            {% for c in CRITICIDADES %}
-              <option value="{{ c }}" {{ 'selected' if c == item.criticidade }}>{{ c }}</option>
-            {% endfor %}
-          </select></div>
-        {% for c in t.campos %}
-          <div class="campo">
-            <label for="e_{{ c.nome }}">{{ c.rotulo }}</label>
-            {% if c.tipo == 'area' %}
-              <textarea id="e_{{ c.nome }}" name="attr_{{ c.nome }}">{{ item.atributos.get(c.nome, '') }}</textarea>
-            {% elif c.tipo == 'selecao' %}
-              <select id="e_{{ c.nome }}" name="attr_{{ c.nome }}">
-                <option value="">Selecione</option>
-                {% for o in c.opcoes %}
-                  <option value="{{ o }}" {{ 'selected' if item.atributos.get(c.nome) == o }}>{{ o }}</option>
-                {% endfor %}
-              </select>
-            {% else %}
-              <input type="text" id="e_{{ c.nome }}" name="attr_{{ c.nome }}"
-                     value="{{ item.atributos.get(c.nome, '') }}">
-            {% endif %}
-          </div>
-        {% endfor %}
-        <button type="submit" class="secundario">Salvar alterações</button>
-      </form>
-    </div>
-    {% endif %}
   </div>
 </div>
+
+<script>
+(function () {
+  // As abas trocam sem recarregar, mas continuam sendo links reais: sem JS,
+  // cada uma abre a própria URL com o painel certo já visível.
+  var abas = document.querySelectorAll('.abas [data-aba]');
+  var paineis = document.querySelectorAll('.painel-aba');
+  Array.prototype.forEach.call(abas, function (link) {
+    link.addEventListener('click', function (e) {
+      if (e.metaKey || e.ctrlKey) { return; }
+      e.preventDefault();
+      var alvo = link.getAttribute('data-aba');
+      Array.prototype.forEach.call(abas, function (l) {
+        var ativa = l === link;
+        l.classList.toggle('ativo', ativa);
+        l.setAttribute('aria-selected', ativa ? 'true' : 'false');
+      });
+      Array.prototype.forEach.call(paineis, function (p) {
+        p.hidden = p.id !== 'painel-' + alvo;
+      });
+      history.replaceState(null, '', link.getAttribute('href'));
+    });
+  });
+
+  // Combobox do destino da relação: filtra por nome/código e, por padrão,
+  // só oferece os tipos que fazem sentido para a relação escolhida.
+  var CANDIDATOS = {{ candidatos|tojson }};
+  var SUGERIDOS = {{ destinos|tojson }};
+  var campo = document.getElementById('destino-busca');
+  var oculto = document.getElementById('id_destino');
+  var lista = document.getElementById('destino-lista');
+  var escolhido = document.getElementById('destino-escolhido');
+  var tipoRel = document.getElementById('tipo_relacao');
+  var todos = document.getElementById('todos-tipos');
+  if (!campo || !lista) { return; }
+
+  function elegiveis() {
+    if (todos && todos.checked) { return CANDIDATOS; }
+    var permitidos = SUGERIDOS[tipoRel.value] || [];
+    if (!permitidos.length) { return CANDIDATOS; }
+    return CANDIDATOS.filter(function (c) { return permitidos.indexOf(c.tipo_item) >= 0; });
+  }
+
+  function fechar() { lista.hidden = true; lista.innerHTML = ''; campo.setAttribute('aria-expanded', 'false'); }
+
+  function desenhar() {
+    var termo = campo.value.trim().toLowerCase();
+    var achados = elegiveis().filter(function (c) {
+      return !termo || c.nome.toLowerCase().indexOf(termo) >= 0 ||
+             c.codigo.toLowerCase().indexOf(termo) >= 0;
+    }).slice(0, 10);
+    if (!achados.length) {
+      lista.innerHTML = '<li class="nada">Nenhum ativo compatível. Marque "mostrar ativos de qualquer tipo".</li>';
+      lista.hidden = false;
+      return;
+    }
+    lista.innerHTML = '';
+    achados.forEach(function (c) {
+      var li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = '<span class="s-nome"></span><span class="s-meta"></span>';
+      b.querySelector('.s-nome').textContent = c.nome;
+      b.querySelector('.s-meta').textContent = c.tipo_rotulo + ' · ' + c.codigo;
+      b.addEventListener('click', function () {
+        oculto.value = c.id_item;
+        campo.value = c.nome;
+        escolhido.textContent = 'Escolhido: ' + c.nome + ' (' + c.codigo + ')';
+        fechar();
+      });
+      li.appendChild(b);
+      lista.appendChild(li);
+    });
+    lista.hidden = false;
+    campo.setAttribute('aria-expanded', 'true');
+  }
+
+  campo.addEventListener('input', function () { oculto.value = ''; escolhido.textContent = 'Nenhum ativo escolhido.'; desenhar(); });
+  campo.addEventListener('focus', desenhar);
+  campo.addEventListener('keydown', function (e) { if (e.key === 'Escape') { fechar(); } });
+  if (tipoRel) { tipoRel.addEventListener('change', function () { if (!lista.hidden) { desenhar(); } }); }
+  if (todos) { todos.addEventListener('change', function () { if (!lista.hidden) { desenhar(); } }); }
+  document.addEventListener('click', function (e) {
+    if (!lista.contains(e.target) && e.target !== campo) { fechar(); }
+  });
+})();
+</script>
 {% endblock %}

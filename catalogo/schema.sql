@@ -109,7 +109,8 @@ CREATE TABLE IF NOT EXISTS validacao (
     etapa        TEXT NOT NULL,            -- negocial|tecnica|arquitetural
     situacao     TEXT NOT NULL DEFAULT 'pendente', -- pendente|aprovada|rejeitada
     parecer      TEXT,
-    responsavel  TEXT,
+    atribuido_a  TEXT,                     -- quem assumiu a análise (fila)
+    responsavel  TEXT,                     -- quem decidiu, preenchido na decisão
     prazo        TEXT,
     criado_em    TEXT NOT NULL DEFAULT (datetime('now')),
     concluido_em TEXT

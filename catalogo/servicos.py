@@ -601,6 +601,92 @@ def serie_historica(con, indicador: str) -> list[dict]:
         "WHERE indicador = ? ORDER BY competencia", (indicador,))]
 
 
+# Campos do snapshot que mudam por mecânica do ciclo de vida, não por decisão
+# de quem cadastra: poluem a leitura do validador e ficam fora do resumo.
+CAMPOS_MECANICOS = {"id_item", "codigo", "revisao_atual", "criado_em", "atualizado_em",
+                    "criado_por", "status_ciclo_vida", "inicio_vigencia", "fim_vigencia"}
+
+ROTULOS_DIFF = {
+    "nome": "Nome", "descricao": "Descrição", "criticidade": "Criticidade",
+    "tipo_item": "Tipo", "id_pai": "Item pai", "id_squad": "Squad",
+    "atributos": "Campos do tipo", "responsaveis": "Responsáveis",
+    "relacoes": "Relações", "evidencias": "Evidências",
+}
+
+
+def _resumir_valor(chave: str, valor) -> str:
+    """Transforma o pedaço do payload em algo que uma pessoa lê de relance."""
+    if valor in (None, "", [], {}):
+        return "—"
+    if chave == "atributos" and isinstance(valor, dict):
+        return " · ".join(f"{k}: {v}" for k, v in sorted(valor.items()) if v) or "—"
+    if isinstance(valor, list):
+        if chave == "evidencias":
+            corpo = ", ".join(e.get("titulo", "") for e in valor)
+        elif chave == "responsaveis":
+            corpo = ", ".join(e.get("papel", "").replace("_", " ") for e in valor)
+        elif chave == "relacoes":
+            corpo = ", ".join(f"{e.get('tipo_relacao')} #{e.get('id_destino')}"
+                              for e in valor)
+        else:
+            corpo = ", ".join(str(e) for e in valor)
+        return f"{len(valor)}: {corpo}" if corpo else str(len(valor))
+    return str(valor)
+
+
+def diff_da_revisao(con, id_item: int, id_revisao: int | None) -> dict:
+    """O que mudou na revisão em análise, contra a revisão anterior.
+
+    O validador decidia sem ver a diferença: o comparador existia e só era
+    alcançável por um link no fim do histórico. Aqui ele vem resumido — sem os
+    campos que o próprio ciclo de vida mexe.
+    """
+    vazio = {"numero": None, "anterior": None, "diff": {}, "primeira": True}
+    if not id_revisao:
+        return vazio
+    linha = con.execute(
+        "SELECT numero_revisao FROM revisao_catalogo WHERE id_revisao = ?",
+        (id_revisao,)).fetchone()
+    if linha is None:
+        return vazio
+    numero = linha["numero_revisao"]
+    if numero <= 1:
+        return {**vazio, "numero": numero}
+
+    bruto = comparar_revisoes(con, id_item, numero - 1, numero)
+    resumo = {}
+    for chave, valores in bruto.items():
+        if chave in CAMPOS_MECANICOS:
+            continue
+        resumo[ROTULOS_DIFF.get(chave, chave)] = {
+            "antes": _resumir_valor(chave, valores["antes"]),
+            "depois": _resumir_valor(chave, valores["depois"]),
+        }
+    return {"numero": numero, "anterior": numero - 1, "primeira": False,
+            "diff": resumo}
+
+
+def minha_mesa(con, usuario: str) -> dict:
+    """O trabalho que é meu: o que assumi, o que posso assumir e o que cadastrei."""
+    def itens(status: tuple) -> list[dict]:
+        marcas = ",".join("?" * len(status))
+        return [dict(l) for l in con.execute(
+            "SELECT i.id_item, i.codigo, i.nome, i.tipo_item, i.status_ciclo_vida,"
+            " i.criticidade, i.atualizado_em,"
+            " (SELECT q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item"
+            "   ORDER BY q.id_qualidade DESC LIMIT 1) AS score"
+            " FROM item_catalogo i WHERE i.criado_por = ?"
+            f" AND i.status_ciclo_vida IN ({marcas})"
+            " ORDER BY i.atualizado_em DESC", (usuario, *status))]
+
+    return {
+        "minhas_validacoes": governanca.fila_validacao(con, atribuido_a=usuario),
+        "fila_livre": governanca.fila_validacao(con, apenas_livres=True),
+        "meus_rascunhos": itens(("rascunho", "em_revisao")),
+        "aguardando_decisao": itens(("em_validacao",)),
+    }
+
+
 def variacao_indicadores(con) -> dict[str, float]:
     """Diferença de cada indicador entre as duas últimas competências.
 

@@ -23,9 +23,10 @@
     {{ item_menu('web.dashboard', 'painel', 'Visão executiva') }}
     {{ item_menu('web.catalogo', 'catalogo', 'Catálogo de ativos') }}
     {{ item_menu('web.mapa', 'mapa', 'Mapa DDD') }}
-    {{ item_menu('web.validacoes', 'validacoes', 'Validações') }}
-    <div class="grupo">Cadastrar</div>
+    <div class="grupo">Trabalhar</div>
+    {{ item_menu('web.meu_trabalho', 'mesa', 'Minha mesa') }}
     {{ item_menu('web.novo_ativo', 'novo', 'Novo ativo') }}
+    {{ item_menu('web.validacoes', 'validacoes', 'Validações') }}
     <div class="grupo">Administração</div>
     {{ item_menu('web.politicas', 'politicas', 'Políticas') }}
     <a href="{{ url_for('api.indicadores') }}">API de indicadores</a>

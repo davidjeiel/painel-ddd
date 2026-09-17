@@ -35,7 +35,7 @@ núcleo.
 | `relacionamento_ativo` | Grafo tipado entre ativos, com criticidade, mecanismo e origem |
 | `politica_governanca` | Rito por tipo e criticidade: etapas, evidência mínima, score, SLA, revisão |
 | `revisao_catalogo` | Snapshot imutável com hash SHA-256 do payload publicado |
-| `validacao` | Etapas abertas por revisão, com prazo, parecer e situação |
+| `validacao` | Etapas abertas por revisão, com prazo, parecer e situação; `atribuido_a` é quem assumiu a análise e `responsavel`, quem decidiu |
 | `evidencia` | ADR, OpenAPI, repositório, documento ou link |
 | `auditoria_evento` | Quem, quando, de onde, o que antes e o que depois |
 | `qualidade_catalogo` | Score materializado por dimensão, com pendências |

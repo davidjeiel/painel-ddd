@@ -29,9 +29,30 @@ def fechar_db(_exc=None) -> None:
         db.close()
 
 
+# Colunas acrescentadas depois da primeira versão do schema. `CREATE TABLE IF NOT
+# EXISTS` não altera tabela existente, então bancos antigos precisam do ALTER.
+MIGRACOES = [
+    ("validacao", "atribuido_a", "TEXT"),
+]
+
+
+def migrar(con: sqlite3.Connection) -> list[str]:
+    """Aplica as colunas que faltam num banco já criado. Devolve o que mudou."""
+    aplicadas = []
+    for tabela, coluna, tipo in MIGRACOES:
+        existentes = {l["name"] for l in con.execute(f"PRAGMA table_info({tabela})")}
+        if existentes and coluna not in existentes:
+            con.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
+            aplicadas.append(f"{tabela}.{coluna}")
+    if aplicadas:
+        con.commit()
+    return aplicadas
+
+
 def criar_schema(con: sqlite3.Connection) -> None:
     con.executescript(SCHEMA.read_text(encoding="utf-8"))
     con.commit()
+    migrar(con)
 
 
 def init_db() -> None:

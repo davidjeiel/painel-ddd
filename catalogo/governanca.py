@@ -86,24 +86,32 @@ def pre_check(con, id_item: int) -> dict:
     t = tipos.tipo(item["tipo_item"])
     bloqueios: list[str] = []
     alertas: list[str] = []
+    # cada bloqueio carrega um código além do texto: é o que permite ao
+    # checklist de publicação agrupar os impedimentos por etapa sem reler frases
+    codigos: list[str] = []
+
+    def bloquear(codigo: str, texto: str) -> None:
+        codigos.append(codigo)
+        bloqueios.append(texto)
 
     # campos obrigatórios e hierarquia
     atributos = json.loads(item["atributos"] or "{}")
     for campo in t.campos:
         if campo.obrigatorio and not str(atributos.get(campo.nome, "")).strip():
-            bloqueios.append(f"Campo obrigatório vazio: {campo.rotulo}")
+            bloquear("campo", f"Campo obrigatório vazio: {campo.rotulo}")
     if not (item["descricao"] or "").strip():
-        bloqueios.append("Descrição é obrigatória para publicar")
+        bloquear("descricao", "Descrição é obrigatória para publicar")
     if t.pai and not item["id_pai"]:
-        bloqueios.append(f"Hierarquia incompleta: informe o {tipos.tipo(t.pai).rotulo}")
+        bloquear("hierarquia",
+                 f"Hierarquia incompleta: informe o {tipos.tipo(t.pai).rotulo}")
 
     # ownership (reaproveita a mesma query de "papéis ativos" de qualidade.py
     # para não dessincronizar a regra do pré-check da pontuação de qualidade)
     papeis = qualidade._papeis(con, id_item)
     if t.exige_owner_negocial and "owner_negocial" not in papeis:
-        bloqueios.append("Owner negocial não definido")
+        bloquear("owner", "Owner negocial não definido")
     if t.exige_owner_tecnico and "owner_tecnico" not in papeis:
-        bloqueios.append("Owner técnico não definido")
+        bloquear("owner", "Owner técnico não definido")
 
     # duplicidade
     dup = con.execute(
@@ -112,19 +120,19 @@ def pre_check(con, id_item: int) -> dict:
         (item["tipo_item"], item["nome"], id_item),
     ).fetchone()["c"]
     if dup:
-        bloqueios.append("Já existe ativo do mesmo tipo com esse nome")
+        bloquear("duplicidade", "Já existe ativo do mesmo tipo com esse nome")
 
     # ciclo em depende_de
     if _tem_ciclo(con, id_item):
-        bloqueios.append("Relação circular de dependência detectada")
+        bloquear("ciclo", "Relação circular de dependência detectada")
 
     # evidências mínimas
     total_ev = con.execute(
         "SELECT COUNT(*) c FROM evidencia WHERE id_item = ?", (id_item,)
     ).fetchone()["c"]
     if total_ev < pol["evidencia_minima"]:
-        bloqueios.append(
-            f"Evidência mínima não atendida ({total_ev}/{pol['evidencia_minima']})")
+        bloquear("evidencia",
+                 f"Evidência mínima não atendida ({total_ev}/{pol['evidencia_minima']})")
 
     # relações para itens fora de vigência
     fora = con.execute(
@@ -139,16 +147,57 @@ def pre_check(con, id_item: int) -> dict:
 
     # score mínimo
     if q["score_total"] < pol["score_minimo"]:
-        bloqueios.append(
-            f"Score de qualidade abaixo do mínimo ({q['score_total']}% < {pol['score_minimo']}%)")
+        bloquear("score",
+                 f"Score de qualidade abaixo do mínimo "
+                 f"({q['score_total']}% < {pol['score_minimo']}%)")
 
     return {
         "aprovado": not bloqueios,
         "bloqueios": bloqueios,
+        "codigos": codigos,
         "alertas": alertas + [p for p in q["pendencias"]],
         "score": q["score_total"],
         "politica": pol,
     }
+
+
+# Cada etapa do caminho até a publicação e os códigos de bloqueio que a impedem.
+ETAPAS_PUBLICACAO = [
+    ("descrever", "Descrever o ativo", ("descricao", "campo", "duplicidade"), "resumo"),
+    ("responsaveis", "Definir responsáveis", ("owner",), "pessoas"),
+    ("conectar", "Conectar ao catálogo", ("hierarquia", "ciclo"), "relacoes"),
+    ("evidenciar", "Anexar evidências", ("evidencia",), "evidencias"),
+    ("qualidade", "Atingir o score mínimo", ("score",), "resumo"),
+]
+
+
+def caminho_publicacao(con, id_item: int, checagem: dict | None = None) -> dict:
+    """Os cinco passos até publicar, com o estado real de cada um.
+
+    Deriva do próprio pré-check — é a mesma regra que bloqueia a submissão, só
+    que apresentada como caminho em vez de lista de erros, e com a âncora da
+    aba que resolve cada pendência.
+    """
+    checagem = checagem or pre_check(con, id_item)
+    pares = list(zip(checagem["codigos"], checagem["bloqueios"]))
+    pol = checagem["politica"]
+    metas = {
+        "evidenciar": f"mínimo de {pol['evidencia_minima']} evidência(s)",
+        "qualidade": f"mínimo de {pol['score_minimo']}% · atual {checagem['score']}%",
+        "conectar": "hierarquia válida e sem dependência circular",
+        "responsaveis": "papéis exigidos pelo tipo de ativo",
+        "descrever": "descrição e campos obrigatórios do tipo",
+    }
+    passos = []
+    for chave, rotulo, codigos, aba in ETAPAS_PUBLICACAO:
+        pendencias = [texto for codigo, texto in pares if codigo in codigos]
+        passos.append({"chave": chave, "rotulo": rotulo, "aba": aba,
+                       "meta": metas[chave], "pendencias": pendencias,
+                       "ok": not pendencias})
+    return {"passos": passos,
+            "concluidos": sum(1 for p in passos if p["ok"]),
+            "total": len(passos),
+            "aprovado": checagem["aprovado"]}
 
 
 def _tem_ciclo(con, id_item: int) -> bool:
@@ -200,20 +249,49 @@ def abrir_validacoes(con, id_item: int, id_revisao: int, usuario: str) -> list[i
     return ids
 
 
-def fila_validacao(con, etapa: str | None = None) -> list[dict]:
+def fila_validacao(con, etapa: str | None = None, atribuido_a: str | None = None,
+                   apenas_livres: bool = False) -> list[dict]:
     sql = (
         "SELECT v.*, i.codigo, i.nome, i.tipo_item, i.criticidade, s.nome AS squad "
         "FROM validacao v JOIN item_catalogo i ON i.id_item = v.id_item "
         "LEFT JOIN squad s ON s.id_squad = i.id_squad "
         "WHERE v.situacao = 'pendente'"
     )
-    params: tuple = ()
+    params: list = []
     if etapa:
         sql += " AND v.etapa = ?"
-        params = (etapa,)
+        params.append(etapa)
+    if atribuido_a:
+        sql += " AND v.atribuido_a = ?"
+        params.append(atribuido_a)
+    if apenas_livres:
+        sql += " AND v.atribuido_a IS NULL"
     ordem = ("ORDER BY CASE i.criticidade WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 "
              "WHEN 'media' THEN 2 ELSE 3 END, v.prazo")
     return [dict(l) for l in con.execute(f"{sql} {ordem}", params)]
+
+
+def assumir_validacao(con, id_validacao: int, usuario: str) -> dict:
+    """Marca quem está analisando, para dois validadores não duplicarem trabalho."""
+    val = con.execute("SELECT * FROM validacao WHERE id_validacao = ?",
+                      (id_validacao,)).fetchone()
+    if val is None:
+        raise LookupError("validação não encontrada")
+    if val["situacao"] != "pendente":
+        return {"assumida": False, "motivo": "Validação já concluída."}
+    if val["atribuido_a"] and val["atribuido_a"] != usuario:
+        return {"assumida": False,
+                "motivo": f"Já está com {val['atribuido_a']}."}
+    con.execute("UPDATE validacao SET atribuido_a = ? WHERE id_validacao = ?",
+                (usuario, id_validacao))
+    con.commit()
+    return {"assumida": True, "motivo": ""}
+
+
+def liberar_validacao(con, id_validacao: int, usuario: str) -> None:
+    con.execute("UPDATE validacao SET atribuido_a = NULL "
+                "WHERE id_validacao = ? AND atribuido_a = ?", (id_validacao, usuario))
+    con.commit()
 
 
 def sla_restante(prazo: str | None) -> str:

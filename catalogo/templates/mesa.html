@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block titulo %}Minha mesa{% endblock %}
+
+{% macro lista_itens(itens, vazio) %}
+  <table>
+    <thead><tr><th scope="col">Ativo</th><th scope="col">Tipo</th>
+               <th scope="col">Status</th><th scope="col">Qualidade</th>
+               <th scope="col">Atualizado</th></tr></thead>
+    <tbody>
+    {% for i in itens %}
+      <tr>
+        <td><a href="{{ url_for('web.detalhe', id_item=i.id_item) }}">{{ i.nome }}</a>
+            <div class="mono discreto">{{ i.codigo }}</div></td>
+        <td>{{ i.tipo_item|rotulo_tipo }}</td>
+        <td><span class="etiqueta {{ i.status_ciclo_vida }}">{{ i.status_ciclo_vida|rotulo_status }}</span></td>
+        <td>{% set s = i.score or 0 %}
+            <span class="score {{ 'bom' if s >= 80 else ('medio' if s >= 60 else 'ruim') }}">{{ s }}%</span></td>
+        <td class="discreto">{{ i.atualizado_em }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="vazio">{{ vazio }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endmacro %}
+
+{% macro lista_validacoes(fila, vazio, acao) %}
+  <table>
+    <thead><tr><th scope="col">Ativo</th><th scope="col">Etapa</th>
+               <th scope="col">Criticidade</th><th scope="col">SLA</th>
+               <th scope="col"></th></tr></thead>
+    <tbody>
+    {% for v in fila %}
+      <tr class="{{ 'linha-vencida' if v.prazo|sla == 'vencido' }}">
+        <td><a href="{{ url_for('web.detalhe', id_item=v.id_item) }}">{{ v.nome }}</a>
+            <div class="discreto">{{ v.tipo_item|rotulo_tipo }} · {{ v.squad or 'sem squad' }}</div></td>
+        <td>{{ v.etapa }}</td>
+        <td><span class="etiqueta {{ v.criticidade }}">{{ v.criticidade }}</span></td>
+        <td><span class="etiqueta {{ 'critica' if v.prazo|sla == 'vencido' }}">{{ v.prazo|sla }}</span></td>
+        <td><a href="{{ url_for('web.validacoes', id_validacao=v.id_validacao, etapa=v.etapa) }}">{{ acao }}</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="vazio">{{ vazio }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endmacro %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Minha mesa</h1>
+  <p>O que está com <strong>{{ usuario }}</strong>: as análises assumidas, o que pode ser
+     assumido e os cadastros que você abriu.</p>
+</div>
+
+<div class="grade kpis">
+  <div class="kpi"><div class="rotulo">Análises comigo</div>
+    <div class="valor {{ 'alerta' if minhas_validacoes }}">{{ minhas_validacoes|length }}</div></div>
+  <div class="kpi"><div class="rotulo">Disponíveis na fila</div>
+    <div class="valor">{{ fila_livre|length }}</div></div>
+  <div class="kpi"><div class="rotulo">Meus rascunhos</div>
+    <div class="valor">{{ meus_rascunhos|length }}</div></div>
+  <div class="kpi"><div class="rotulo">Aguardando decisão</div>
+    <div class="valor">{{ aguardando_decisao|length }}</div></div>
+</div>
+
+<div class="cartao" style="margin-top:16px">
+  <h2>Análises que assumi</h2>
+  {{ lista_validacoes(minhas_validacoes, 'Nenhuma análise assumida. Pegue uma da fila abaixo.', 'Decidir') }}
+</div>
+
+<div class="cartao">
+  <h2>Fila livre — ninguém assumiu ainda</h2>
+  {{ lista_validacoes(fila_livre, 'Nada livre na fila.', 'Assumir') }}
+</div>
+
+<div class="cartao">
+  <h2>Meus rascunhos e revisões abertas</h2>
+  {{ lista_itens(meus_rascunhos, 'Nenhum rascunho seu em aberto.') }}
+</div>
+
+<div class="cartao">
+  <h2>Meus ativos aguardando decisão de terceiros</h2>
+  {{ lista_itens(aguardando_decisao, 'Nada seu em validação no momento.') }}
+</div>
+{% endblock %}

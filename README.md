@@ -28,6 +28,10 @@ Comandos disponíveis:
 
 O banco fica em `dados/catalogo.db` (configurável pela variável `CATALOGO_DB`).
 
+Colunas acrescentadas depois da primeira versão do schema ficam em `db.MIGRACOES` e são
+aplicadas automaticamente na abertura do banco — `CREATE TABLE IF NOT EXISTS` não altera
+tabela existente, então um banco antigo recebe o `ALTER` sem precisar de recarga.
+
 ## Telas
 
 Quatro experiências nucleares, como recomendado na proposta:
@@ -40,10 +44,15 @@ Quatro experiências nucleares, como recomendado na proposta:
   remoção individual, recorte "somente sem responsável", status, criticidade e score.
 - **Wizard de cadastro** (`/ativo/novo`) — campos dinâmicos por tipo de ativo,
   contexto herdado do pai e checklist do que a política exige.
-- **Visão 360°** (`/ativo/<id>`) — negócio, tecnologia, ownership, relações de entrada
-  e saída, evidências, revisões, auditoria e pré-check de publicação.
-- **Central de validações** (`/validacoes`) — fila priorizada por criticidade e SLA,
-  checklist de governança e decisão com parecer.
+- **Visão 360°** (`/ativo/<id>`) — abas de Resumo, Relações, Pessoas, Evidências e
+  Histórico (`?aba=`), com os formulários de escrita dentro da aba a que pertencem, e o
+  **caminho até a publicação**: cinco passos com o estado real derivado do pré-check,
+  cada um levando à aba que resolve a pendência.
+- **Minha mesa** (`/meu-trabalho`) — análises que você assumiu, fila livre para assumir,
+  seus rascunhos e seus ativos aguardando decisão de terceiros.
+- **Central de validações** (`/validacoes`) — fila priorizada por criticidade e SLA, com
+  o diff da revisão em análise, evidências e responsáveis no painel de decisão,
+  atribuição da análise e "ir para a próxima da fila" depois de decidir.
 - **Mapa DDD** (`/mapa`) — árvore Domínio → Subdomínio → Contexto → Capacidade com
   cobertura de implementação.
 
@@ -64,11 +73,14 @@ Ao redor do núcleo:
 
 - `RESPONSABILIDADE` — ownership por papel, com vigência.
 - `RELACIONAMENTO_ATIVO` — grafo tipado (implementa, expõe, consome, produz, depende de,
-  persiste em) com criticidade, mecanismo e origem da evidência.
+  persiste em) com criticidade, mecanismo e origem da evidência. `tipos.DESTINOS_SUGERIDOS`
+  orienta o formulário sobre quais tipos fazem sentido em cada relação — é sugestão que
+  filtra a lista, não proibição: quem cadastra pode pedir todos os tipos.
 - `POLITICA_GOVERNANCA` — etapas de validação, evidência mínima, score mínimo, SLA e
   periodicidade de revisão por tipo e criticidade.
 - `REVISAO_CATALOGO` — snapshot imutável com hash SHA-256 por publicação.
-- `VALIDACAO`, `EVIDENCIA`, `AUDITORIA_EVENTO`, `QUALIDADE_CATALOGO`.
+- `VALIDACAO` — etapas abertas por revisão, com `atribuido_a` (quem assumiu a análise) e
+  `responsavel` (quem decidiu). `EVIDENCIA`, `AUDITORIA_EVENTO`, `QUALIDADE_CATALOGO`.
 - `SNAPSHOT_INDICADOR` e as visões `vw_item_qualidade` e `vw_cobertura_capacidade`,
   para a camada analítica consumir sem bater no modelo operacional.
 
@@ -134,6 +146,11 @@ circular, bloqueio de descontinuação e evolução do score.
 um ativo, sugestões da busca global, filtros retomados e limpos, recorte sem responsável,
 KPIs que levam ao recorte, leitura da variação mensal e o formulário de cadastro que
 devolve tudo o que foi digitado depois de um erro de regra de negócio.
+
+`tests/test_fluxo.py` cobre o fluxo de trabalho: abas da visão 360°, o checklist de
+publicação (inclusive a garantia de que nenhum bloqueio do pré-check fica de fora dele),
+o diff resumido da revisão em análise, o loop de decisão do validador, atribuição da
+análise, a mesa pessoal, a migração do banco antigo e o registro de relações com mecanismo.
 
 ## Estrutura
 
