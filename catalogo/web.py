@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import json
 
+from functools import wraps
+
 from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
                    request, session, url_for)
 
-from . import governanca, integracoes, servicos, tipos
+from . import (acesso, governanca, integracoes, notificacoes, servicos, tipos)
 from .db import get_db
 
 bp = Blueprint("web", __name__)
@@ -26,7 +28,11 @@ SECOES = {
     "web.descontinuar": "catalogo",
     "web.comparar": "catalogo",
     "web.relacoes_lote": "catalogo",
+    "web.grafo": "catalogo",
     "web.mapa": "mapa",
+    "web.perfil": "perfil",
+    "web.caixa_notificacoes": "notificacoes",
+    "web.preferencias_notificacao": "notificacoes",
     "web.novo_ativo": "novo",
     "web.descobertas": "descobertas",
     "web.triagem": "descobertas",
@@ -55,8 +61,70 @@ FILTROS_CATALOGO = {
 POR_PAGINA = 50
 
 
+def pessoa_atual() -> dict | None:
+    """A pessoa da sessão. Hoje escolhida em /perfil; amanhã, vinda do SSO.
+
+    A decisão 12.1-a troca apenas a origem deste valor — papéis, escopos e as
+    regras de autorização não mudam.
+    """
+    id_pessoa = session.get("id_pessoa")
+    if not id_pessoa:
+        return None
+    return acesso.pessoa(get_db(), id_pessoa)
+
+
 def usuario_atual() -> str:
+    """Identificador gravado na trilha de auditoria."""
+    quem = pessoa_atual()
+    if quem:
+        return quem.get("login") or quem["matricula"]
     return session.get("usuario", "curador.demo")
+
+
+def modo_leitura() -> bool:
+    return session.get("modo", "edicao") == "leitura"
+
+
+def pode(acao: str, id_item: int | None = None) -> bool:
+    """Autorização para uso nos templates: esconde o que a pessoa não pode fazer."""
+    if modo_leitura():
+        return False
+    quem = pessoa_atual()
+    if quem is None:
+        return False
+    return acesso.pode(get_db(), quem["id_pessoa"], acao, id_item)
+
+
+def exige(acao: str):
+    """Autorização na rota. Esconder o botão não é autorização: a rota recusa.
+
+    O escopo sai do próprio alvo — quando a view recebe `id_item`, o papel é
+    resolvido no domínio daquele ativo.
+    """
+    def decorador(vista):
+        @wraps(vista)
+        def envolvida(*args, **kwargs):
+            quem = pessoa_atual()
+            id_item = kwargs.get("id_item")
+            if quem is None:
+                flash("Escolha quem é você antes de agir no catálogo.", "erro")
+                return redirect(url_for("web.perfil", destino=request.referrer or "/"))
+            if modo_leitura():
+                flash("Você está em modo de leitura. Troque no seu perfil para editar.",
+                      "erro")
+                return redirect(request.referrer or url_for("web.dashboard"))
+            if not acesso.pode(get_db(), quem["id_pessoa"], acao, id_item):
+                raise acesso.SemPermissao(
+                    f"Seu papel não permite {acao} neste ativo.")
+            return vista(*args, **kwargs)
+        return envolvida
+    return decorador
+
+
+@bp.app_errorhandler(acesso.SemPermissao)
+def sem_permissao(exc):
+    flash(str(exc), "erro")
+    return redirect(request.referrer or url_for("web.dashboard")), 303
 
 
 def secao_atual() -> str:
@@ -90,9 +158,13 @@ def filtro_numero(valor):
 
 @bp.app_context_processor
 def contexto():
+    quem = pessoa_atual()
     return {"TIPOS": tipos.TIPOS, "CICLO": tipos.CICLO_VIDA,
             "CRITICIDADES": tipos.CRITICIDADES, "usuario": usuario_atual(),
-            "secao": secao_atual()}
+            "secao": secao_atual(), "pessoa": quem, "leitura": modo_leitura(),
+            "pode": pode,
+            "nao_lidas": notificacoes.nao_lidas(get_db(), quem["id_pessoa"])
+                         if quem else 0}
 
 
 # ------------------------------------------------------------------ dashboard
@@ -109,6 +181,111 @@ def dashboard():
         serie_qualidade=servicos.serie_historica(con, "qualidade_media"),
         fila=governanca.fila_validacao(con)[:5],
     )
+
+
+# ------------------------------------------------------------------- perfil
+@bp.route("/perfil", methods=["GET", "POST"])
+def perfil():
+    """Quem é você e em que modo trabalha.
+
+    Enquanto a fonte de identidade não é decidida, a pessoa é escolhida aqui.
+    Quando o SSO entrar, esta tela perde o seletor e mantém o resto.
+    """
+    con = get_db()
+    if request.method == "POST":
+        id_pessoa = request.form.get("id_pessoa", type=int)
+        if id_pessoa and acesso.pessoa(con, id_pessoa):
+            session["id_pessoa"] = id_pessoa
+        elif request.form.get("id_pessoa") == "":
+            session.pop("id_pessoa", None)
+        session["modo"] = ("leitura" if request.form.get("modo") == "leitura"
+                           else "edicao")
+        flash("Perfil atualizado.", "ok")
+        destino = request.form.get("destino") or url_for("web.perfil")
+        return redirect(destino)
+
+    quem = pessoa_atual()
+    return render_template(
+        "perfil.html", pessoas=acesso.pessoas_ativas(con),
+        papeis=acesso.papeis(con, quem["id_pessoa"]) if quem else [],
+        catalogo_papeis=acesso.PAPEIS, permissoes=acesso.PERMISSOES,
+        etapas=acesso.PAPEL_POR_ETAPA,
+        destino=request.args.get("destino", ""))
+
+
+# ------------------------------------------------------------- notificações
+@bp.route("/notificacoes")
+def caixa_notificacoes():
+    quem = pessoa_atual()
+    if quem is None:
+        flash("Escolha quem é você para ver suas notificações.", "erro")
+        return redirect(url_for("web.perfil"))
+    con = get_db()
+    return render_template("notificacoes.html",
+                           itens=notificacoes.caixa(con, quem["id_pessoa"]),
+                           tipos=notificacoes.TIPOS)
+
+
+@bp.route("/notificacoes/<int:id_notificacao>/abrir")
+def abrir_notificacao(id_notificacao: int):
+    quem = pessoa_atual()
+    if quem is None:
+        return redirect(url_for("web.perfil"))
+    con = get_db()
+    linha = con.execute("SELECT url FROM notificacao WHERE id_notificacao = ? "
+                        "AND id_pessoa = ?",
+                        (id_notificacao, quem["id_pessoa"])).fetchone()
+    notificacoes.marcar_lida(con, id_notificacao, quem["id_pessoa"])
+    return redirect(linha["url"] if linha and linha["url"]
+                    else url_for("web.caixa_notificacoes"))
+
+
+@bp.route("/notificacoes/lidas", methods=["POST"])
+def marcar_lidas():
+    quem = pessoa_atual()
+    if quem is None:
+        return redirect(url_for("web.perfil"))
+    total = notificacoes.marcar_todas_lidas(get_db(), quem["id_pessoa"])
+    flash(f"{total} notificação(ões) marcada(s) como lida(s).", "ok")
+    return redirect(url_for("web.caixa_notificacoes"))
+
+
+@bp.route("/notificacoes/preferencias", methods=["GET", "POST"])
+def preferencias_notificacao():
+    quem = pessoa_atual()
+    if quem is None:
+        flash("Escolha quem é você para ajustar as preferências.", "erro")
+        return redirect(url_for("web.perfil"))
+    con = get_db()
+    if request.method == "POST":
+        ativas = {tuple(v.split(":", 1)) for v in request.form.getlist("pref")
+                  if ":" in v}
+        notificacoes.salvar_preferencias(con, quem["id_pessoa"], ativas)
+        flash("Preferências salvas.", "ok")
+        return redirect(url_for("web.preferencias_notificacao"))
+    return render_template("preferencias.html",
+                           preferencias=notificacoes.preferencias(con, quem["id_pessoa"]),
+                           tipos=notificacoes.TIPOS, canais=notificacoes.CANAIS,
+                           disponiveis=notificacoes.CANAIS_DISPONIVEIS)
+
+
+# ------------------------------------------------------------------- grafo
+@bp.route("/ativo/<int:id_item>/grafo")
+def grafo(id_item: int):
+    con = get_db()
+    item = con.execute(
+        "SELECT id_item, codigo, nome, tipo_item FROM item_catalogo "
+        "WHERE id_item = ?", (id_item,)).fetchone()
+    if item is None:
+        abort(404)
+    escolhidos = tuple(t for t in request.args.getlist("tipo") if t in tipos.RELACOES)
+    dados = servicos.posicionar_vizinhanca(servicos.vizinhanca(
+        con, id_item, saltos=request.args.get("saltos", 1, type=int),
+        tipos_relacao=escolhidos))
+    return render_template("grafo.html", item=dict(item), dados=dados,
+                           trilha=servicos.trilha(con, id_item),
+                           relacoes=tipos.RELACOES, escolhidos=escolhidos,
+                           analise=servicos.analise_impacto(con, id_item))
 
 
 # ---------------------------------------------------------------- busca global
@@ -219,6 +396,8 @@ def descobertas():
 
     if request.method == "POST" and conteudo.strip():
         acao = request.form.get("acao", "previa")
+        if acao == "importar" and not pode("importar"):
+            raise acesso.SemPermissao("Seu papel não permite importar descobertas.")
         try:
             if acao == "importar":
                 resultado = integracoes.FONTES[fonte]["importar"](
@@ -246,6 +425,7 @@ def descobertas():
 
 
 @bp.route("/descobertas/triagem", methods=["POST"])
+@exige("triar")
 def triagem():
     ids = [int(i) for i in request.form.getlist("id_item") if i.isdigit()]
     if not ids:
@@ -268,6 +448,8 @@ def novo_ativo():
     con = get_db()
     tipo_item = request.values.get("tipo_item", "")
     if request.method == "POST" and request.form.get("acao") == "salvar":
+        if not pode("cadastrar"):
+            raise acesso.SemPermissao("Seu papel não permite cadastrar ativos.")
         t = tipos.tipo(tipo_item)
         atributos = {c.nome: request.form.get(f"attr_{c.nome}", "").strip()
                      for c in t.campos}
@@ -334,6 +516,7 @@ def detalhe(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/editar", methods=["POST"])
+@exige("editar")
 def editar(id_item: int):
     con = get_db()
     item = con.execute("SELECT tipo_item FROM item_catalogo WHERE id_item = ?",
@@ -357,6 +540,7 @@ def editar(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/responsavel", methods=["POST"])
+@exige("editar")
 def responsavel(id_item: int):
     servicos.definir_responsavel(get_db(), id_item, int(request.form["id_pessoa"]),
                                  request.form["papel"], usuario_atual())
@@ -365,6 +549,7 @@ def responsavel(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/relacao", methods=["POST"])
+@exige("relacionar")
 def relacao(id_item: int):
     destino = request.form.get("id_destino", "").strip()
     if not destino.isdigit():
@@ -383,6 +568,7 @@ def relacao(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/evidencia", methods=["POST"])
+@exige("editar")
 def evidencia(id_item: int):
     servicos.anexar_evidencia(get_db(), id_item, request.form["tipo"],
                               request.form["titulo"], request.form.get("url"),
@@ -392,6 +578,7 @@ def evidencia(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/submeter", methods=["POST"])
+@exige("submeter")
 def submeter(id_item: int):
     con = get_db()
     try:
@@ -408,6 +595,7 @@ def submeter(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/revisar", methods=["POST"])
+@exige("revisar")
 def revisar(id_item: int):
     try:
         servicos.abrir_revisao(get_db(), id_item, usuario_atual())
@@ -418,8 +606,20 @@ def revisar(id_item: int):
 
 
 @bp.route("/ativo/<int:id_item>/descontinuar", methods=["POST"])
+@exige("descontinuar")
 def descontinuar(id_item: int):
-    resultado = servicos.descontinuar(get_db(), id_item,
+    con = get_db()
+    # confirmação em duas etapas quando há consumidor de alta criticidade:
+    # a regra de bloqueio já existia; faltava a interface à altura dela
+    analise = servicos.analise_impacto(con, id_item)
+    if analise["criticos"]:
+        item = con.execute("SELECT codigo FROM item_catalogo WHERE id_item = ?",
+                           (id_item,)).fetchone()
+        if request.form.get("confirmacao", "").strip().upper() != item["codigo"].upper():
+            flash(f"Confirmação incorreta: digite o código {item['codigo']} para "
+                  "descontinuar um ativo com consumidor crítico.", "erro")
+            return redirect(url_for("web.detalhe", id_item=id_item, aba="relacoes"))
+    resultado = servicos.descontinuar(con, id_item,
                                       request.form.get("motivo", ""),
                                       usuario_atual(),
                                       forcar=bool(request.form.get("forcar")))
@@ -443,6 +643,8 @@ def relacoes_lote(id_item: int):
         tipo_relacao = "implementa"
 
     if request.method == "POST":
+        if not pode("relacionar", id_item):
+            raise acesso.SemPermissao("Seu papel não permite relacionar este ativo.")
         destinos = [int(d) for d in request.form.getlist("destino") if d.isdigit()]
         if not destinos:
             flash("Marque ao menos um ativo.", "erro")
@@ -543,6 +745,7 @@ def _proxima_da_fila(con, etapa: str, decidida: int) -> int | None:
 
 
 @bp.route("/validacoes/<int:id_validacao>/assumir", methods=["POST"])
+@exige("decidir")
 def assumir(id_validacao: int):
     resultado = governanca.assumir_validacao(get_db(), id_validacao, usuario_atual())
     flash("Validação assumida por você." if resultado["assumida"]
@@ -552,6 +755,7 @@ def assumir(id_validacao: int):
 
 
 @bp.route("/validacoes/<int:id_validacao>/liberar", methods=["POST"])
+@exige("decidir")
 def liberar(id_validacao: int):
     governanca.liberar_validacao(get_db(), id_validacao, usuario_atual())
     flash("Validação devolvida à fila livre.", "ok")
@@ -560,15 +764,18 @@ def liberar(id_validacao: int):
 
 
 @bp.route("/validacoes/<int:id_validacao>/decidir", methods=["POST"])
+@exige("decidir")
 def decidir(id_validacao: int):
     con = get_db()
     etapa = request.form.get("etapa", "")
     aprovar = request.form["decisao"] == "aprovar"
     seguir = bool(request.form.get("seguir"))
     proxima = _proxima_da_fila(con, etapa, id_validacao) if seguir else None
+    quem = pessoa_atual()
     try:
         resultado = servicos.decidir_validacao(
-            con, id_validacao, aprovar, request.form.get("parecer", ""), usuario_atual())
+            con, id_validacao, aprovar, request.form.get("parecer", ""),
+            usuario_atual(), id_pessoa=quem["id_pessoa"] if quem else None)
     except servicos.RegraDeNegocio as erro:
         flash(str(erro), "erro")
         return redirect(url_for("web.validacoes", etapa=etapa))

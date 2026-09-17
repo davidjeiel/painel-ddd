@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import apoio  # noqa: E402
 
 from catalogo import create_app, db as banco, governanca, servicos  # noqa: E402
 
@@ -26,12 +29,20 @@ def app(tmp_path):
         con.execute("INSERT INTO pessoa (matricula, nome, perfil) "
                     "VALUES ('M1', 'Ana Negócio', 'negocio')")
         con.commit()
+        apoio.criar_pessoa(con, 'Admin Teste', 'admin.teste')
     return aplicacao
 
 
 @pytest.fixture()
 def cliente(app):
-    return app.test_client()
+    """Cliente já autenticado: as rotas de escrita exigem sessão desde a F4.1."""
+    c = app.test_client()
+    with app.app_context():
+        admin = banco.get_db().execute(
+            "SELECT id_pessoa FROM pessoa WHERE login = 'admin.teste'"
+        ).fetchone()["id_pessoa"]
+    apoio.entrar(c, admin)
+    return c
 
 
 def montar_capacidade(con):

@@ -7,13 +7,6 @@ validação em etapas, revisões imutáveis, qualidade cadastral e painel execut
 O objetivo é o MVP descrito no roadmap da proposta (fases 1 e 2), pronto para o piloto
 de dois domínios, sem dependências além do Flask.
 
-**Estado atual do piloto**: 76 testes automatizados verdes e as 203 rotas navegáveis do
-cenário piloto conferidas sem erro nem rolagem horizontal, depois de duas ondas de
-jornada de usuário sobre o MVP inicial — filtros com estado persistente, fila de trabalho
-por pessoa (`/meu-trabalho`), central de validações com diff e atribuição, descoberta
-automática com prévia e bandeja de triagem, relações em lote e o mapa de tecnologia ao
-lado do mapa de negócio.
-
 ## Como rodar
 
 ```bash
@@ -32,6 +25,9 @@ Comandos disponíveis:
 | `flask --app catalogo seed --reset` | Recria o banco com o cenário piloto |
 | `flask --app catalogo qualidade` | Recalcula o score de todos os ativos |
 | `flask --app catalogo snapshot` | Materializa os indicadores do mês |
+| `flask --app catalogo notificar` | Despacha a outbox de notificações (idempotente) |
+| `flask --app catalogo vigiar-sla` | Gera avisos de SLA vencendo e vencido |
+| `flask --app catalogo conceder <login> <papel>` | Concede papel (use `--dominio` para escopo) |
 
 O banco fica em `dados/catalogo.db` (configurável pela variável `CATALOGO_DB`).
 
@@ -56,9 +52,12 @@ Quatro experiências nucleares, como recomendado na proposta:
   Histórico (`?aba=`), com os formulários de escrita dentro da aba a que pertencem, e o
   **caminho até a publicação**: cinco passos com o estado real derivado do pré-check,
   cada um levando à aba que resolve a pendência.
-- **Relações em lote** (`/ativo/<id>/relacoes-lote`) — mapeia de uma vez as dependências
-  de uma aplicação inteira: marca vários destinos, filtra pelos tipos sugeridos para a
-  relação escolhida (ou mostra todos) e ignora o que já existe em vez de duplicar.
+- **Grafo navegável** (`/ativo/<id>/grafo`) — vizinhança de 1 a 3 saltos sobre as relações
+  transversais, em anéis por distância, com filtro por tipo e teto explícito: quando o
+  recorte é cortado, a tela avisa em vez de mentir sobre o alcance da mudança.
+- **Seu perfil** (`/perfil`) — quem assina as publicações e o modo de trabalho
+  (edição ou leitura).
+- **Notificações** (`/notificacoes`) — caixa e preferências por evento e canal.
 - **Minha mesa** (`/meu-trabalho`) — análises que você assumiu, fila livre para assumir,
   seus rascunhos e seus ativos aguardando decisão de terceiros.
 - **Central de validações** (`/validacoes`) — fila priorizada por criticidade e SLA, com
@@ -71,6 +70,18 @@ Quatro experiências nucleares, como recomendado na proposta:
 - **Descobertas** (`/descobertas`) — importa contrato OpenAPI e inventário Git pela
   interface, com **prévia antes de gravar** e bandeja de triagem dos itens que a máquina
   trouxe: aceitar tira da bandeja sem mexer no cadastro, descartar arquiva.
+
+### Aparência
+
+- **Tema noturno** com três estados: claro, escuro e o do sistema operacional. A escolha
+  fica em `localStorage` e é aplicada por um script no `<head>`, antes do CSS, para a tela
+  clara não piscar antes do escuro. Toda a paleta é token em `:root`, redefinida em
+  `@media (prefers-color-scheme: dark)` (guardado por `:root:not([data-tema="claro"])`,
+  para a escolha manual vencer o sistema) e em `:root[data-tema="escuro"]`. Nenhuma cor
+  fixa fora da declaração dos tokens — há teste que garante isso.
+- **Menu lateral recolhível**: de 224px para um trilho de 68px com as iniciais de cada
+  item, mantendo `title` e o rótulo para leitor de tela. A preferência também persiste em
+  `localStorage`. No celular o menu já é uma barra horizontal, e o controle some.
 
 Em todas as telas: busca global no cabeçalho (`/` ou `Ctrl+K` para focar, sugestões
 instantâneas por `/busca/sugestoes`), trilha hierárquica clicável nas telas de ativo e
@@ -103,6 +114,35 @@ Ao redor do núcleo:
 
 Detalhes em [`docs/MODELO.md`](docs/MODELO.md).
 
+## Acesso e papéis
+
+A fonte de identidade ainda é o cadastro local — a pessoa da sessão é escolhida em
+`/perfil`. Quando a decisão corporativa sair, o SSO troca apenas *de onde* ela vem:
+`pessoa.identidade_externa` e `origem_identidade` já existem para receber o `sub` do
+provedor, e papéis, escopos e regras não mudam.
+
+- `atribuicao_papel` guarda papel × escopo (`global`, `dominio` ou `squad`). O escopo do
+  item sai da própria trilha hierárquica: quem responde "Domínio › Contexto" responde
+  também por qual domínio autoriza.
+- `acesso.pode(con, pessoa, acao, item)` é o ponto único de decisão; o decorador
+  `@exige(acao)` aplica nas rotas de escrita. **Esconder o botão não é autorização** — a
+  rota recusa o formulário enviado direto.
+- Cada etapa de validação exige o papel correspondente (`negocial` → negócio, `tecnica` →
+  tech lead, `arquitetural` → arquiteto), ou que a pessoa seja o responsável formal do
+  ativo. E quem submeteu a revisão não decide sobre ela.
+
+## Notificações
+
+Padrão **outbox**: o caso de uso grava a notificação na mesma transação do fato que a
+gerou, e `flask --app catalogo notificar` despacha depois. Sem broker, sem serviço
+auxiliar, testável com o mesmo banco dos testes; se o volume crescer, o mesmo contrato
+migra para uma fila real sem reescrever caso de uso nenhum.
+
+Eventos: revisão submetida (para quem pode decidir aquela etapa), SLA vencendo e vencido,
+revisão rejeitada (para o autor) e ativo publicado (para quem responde pelos
+consumidores). Os canais de e-mail e Teams ficam declarados e desligados até a fonte de
+identidade ser decidida — sem ela não há endereço confiável para onde mandar.
+
 ## Regras de governança implementadas
 
 - **Ciclo de vida**: rascunho → em validação → publicado → em revisão →
@@ -126,6 +166,7 @@ Detalhes em [`docs/MODELO.md`](docs/MODELO.md).
 GET  /api/v1/itens?termo=&tipo_item=&status=
 POST /api/v1/itens
 GET  /api/v1/itens/<id>                 visão 360° completa
+GET  /api/v1/itens/<id>/vizinhanca?saltos=&tipo=
 GET  /api/v1/itens/<id>/qualidade
 GET  /api/v1/itens/<id>/precheck
 POST /api/v1/itens/<id>/submeter
@@ -176,6 +217,11 @@ publicação (inclusive a garantia de que nenhum bloqueio do pré-check fica de 
 o diff resumido da revisão em análise, o loop de decisão do validador, atribuição da
 análise, a mesa pessoal, a migração do banco antigo e o registro de relações com mecanismo.
 
+`tests/test_acesso.py` cobre a fase 4: papel com escopo, etapa que exige papel,
+segregação de função, recusa na rota mesmo sem passar pela tela, modo de leitura,
+confirmação da descontinuação, outbox idempotente, vigia de SLA que não repete alerta e a
+vizinhança do grafo com teto e filtro.
+
 `tests/test_escala.py` cobre a escala: prévia que não escreve, importação marcando a
 origem, bandeja de triagem (e a garantia de que ela não toca em cadastro humano), relações
 em lote sem duplicar as existentes, paginação com total real, ordenação por coluna, as duas
@@ -193,6 +239,8 @@ catalogo/
   governanca.py    políticas, pré-check, ciclo de vida e fila
   servicos.py      casos de uso e consultas
   integracoes.py   descoberta automática (OpenAPI, Git)
+  acesso.py        identidade, papéis com escopo e autorização
+  notificacoes.py  outbox, preferências e vigia de SLA
   web.py           telas
   api.py           API JSON
   seed.py          carga dos dois domínios piloto
@@ -202,8 +250,10 @@ tests/             regras de governança (test_governanca) e navegação (test_j
 
 ## O que ficou fora do MVP
 
-Grafo navegável interativo, RBAC por perfil, notificações, integrações com
-CMDB/CI-CD/backlog e o modelo estrela completo para Power BI — todos previstos para as
-fases 4 e 5 do roadmap. As decisões abertas listadas na seção 12.1 da
+Integrações com CMDB/CI-CD/backlog e o modelo estrela completo para Power BI — previstos
+para a fase 5 e dependentes das decisões abertas (granularidade mínima e sistema de
+registro operacional). O grafo, o RBAC e as notificações foram entregues na fase 4, com a
+ressalva de que a identidade ainda é local: a autenticação corporativa espera a decisão
+12.1-a. As decisões abertas listadas na seção 12.1 da
 proposta (fonte de identidade de pessoas, granularidade mínima, sistema de registro
 operacional) continuam valendo antes da expansão corporativa.

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Notificações{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Notificações</h1>
+  <p>O que aconteceu no catálogo e pede a sua atenção.</p>
+</div>
+
+<div class="abas">
+  <a href="{{ url_for('web.caixa_notificacoes') }}" class="ativo">Caixa</a>
+  <a href="{{ url_for('web.preferencias_notificacao') }}">Preferências</a>
+</div>
+
+<div class="cartao">
+  <div class="caminho-cabeca">
+    <h2>{{ itens|length }} notificação(ões)</h2>
+    {% if nao_lidas %}
+      <form method="post" action="{{ url_for('web.marcar_lidas') }}">
+        <button type="submit" class="secundario">Marcar todas como lidas</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if itens %}
+    <ul class="notificacoes">
+      {% for n in itens %}
+        <li class="{{ 'nao-lida' if not n.lido_em }}">
+          <a href="{{ url_for('web.abrir_notificacao', id_notificacao=n.id_notificacao) }}">
+            <span class="n-titulo">{{ n.titulo }}</span>
+            {% if n.corpo %}<span class="n-corpo">{{ n.corpo }}</span>{% endif %}
+            <span class="n-meta">
+              {{ tipos.get(n.tipo, {}).get('rotulo', n.tipo) }}
+              {%- if n.item_codigo %} · {{ n.item_codigo }}{% endif %}
+              · {{ n.criado_em }}
+              {%- if not n.enviado_em %} · <em>na fila de envio</em>{% endif %}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="vazio">Nada por aqui. Quando uma revisão entrar na sua fila ou um SLA
+      começar a vencer, aparece nesta caixa.</p>
+  {% endif %}
+</div>
+{% endblock %}

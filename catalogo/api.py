@@ -61,6 +61,15 @@ def obter_qualidade(id_item: int):
     return jsonify(qualidade.avaliar(get_db(), id_item))
 
 
+@bp.get("/itens/<int:id_item>/vizinhanca")
+def obter_vizinhanca(id_item: int):
+    return jsonify(servicos.vizinhanca(
+        get_db(), id_item,
+        saltos=int(request.args.get("saltos", 1)),
+        tipos_relacao=tuple(request.args.getlist("tipo")),
+        teto=int(request.args.get("teto", 150))))
+
+
 @bp.get("/itens/<int:id_item>/precheck")
 def obter_precheck(id_item: int):
     return jsonify(governanca.pre_check(get_db(), id_item))

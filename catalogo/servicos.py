@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 from datetime import date, datetime
 
@@ -227,23 +228,56 @@ def submeter(con, id_item: int, motivo: str = "", usuario: str = "sistema") -> d
         con.execute(
             "UPDATE item_catalogo SET status_ciclo_vida = 'em_validacao',"
             " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
-    governanca.abrir_validacoes(con, id_item, id_revisao, usuario)
+    ids_validacao = governanca.abrir_validacoes(con, id_item, id_revisao, usuario)
     auditar(con, id_item, "submeter", usuario,
             depois={"revisao": numero_revisao, "motivo": motivo})
+    _avisar_validadores(con, id_item, ids_validacao, usuario)
     con.commit()
     resultado["id_revisao"] = id_revisao
     resultado["numero_revisao"] = numero_revisao
     return resultado
 
 
+def _avisar_validadores(con, id_item: int, ids_validacao: list[int],
+                        autor: str) -> None:
+    """Enfileira o aviso na mesma transação da submissão (padrão outbox)."""
+    from . import acesso, notificacoes
+
+    item = con.execute("SELECT nome, codigo FROM item_catalogo WHERE id_item = ?",
+                       (id_item,)).fetchone()
+    for id_validacao in ids_validacao:
+        etapa = con.execute("SELECT etapa FROM validacao WHERE id_validacao = ?",
+                            (id_validacao,)).fetchone()["etapa"]
+        aptos = acesso.quem_pode_decidir(con, id_validacao)
+        notificacoes.para_muitos(
+            con, aptos, "revisao_submetida",
+            f"{item['nome']} aguarda validação {etapa}",
+            f"{item['codigo']} entrou na fila da etapa {etapa}.",
+            url=f"/validacoes?id_validacao={id_validacao}",
+            id_item=id_item, id_validacao=id_validacao,
+            sufixo_chave=f"revisao_submetida:{id_validacao}")
+
+
 def decidir_validacao(con, id_validacao: int, aprovar: bool, parecer: str,
-                      usuario: str = "sistema") -> dict:
+                      usuario: str = "sistema", id_pessoa: int | None = None) -> dict:
+    """Decide uma etapa de validação.
+
+    Quando `id_pessoa` é informado — sempre, vindo da interface — a decisão
+    passa pela autorização: o papel tem de bater com a etapa e quem submeteu a
+    revisão não decide sobre ela. Chamadas internas (CLI, carga) omitem a
+    pessoa e seguem sem essa verificação, porque não há sessão a verificar.
+    """
     val = con.execute(
         "SELECT * FROM validacao WHERE id_validacao = ?", (id_validacao,)).fetchone()
     if val is None:
         raise RegraDeNegocio("validação não encontrada")
     if val["situacao"] != "pendente":
         raise RegraDeNegocio("validação já concluída")
+    if id_pessoa is not None:
+        from . import acesso
+        autorizado, motivo = acesso.pode_decidir(con, id_pessoa, id_validacao)
+        if not autorizado:
+            raise acesso.SemPermissao(motivo)
 
     con.execute(
         "UPDATE validacao SET situacao = ?, parecer = ?, responsavel = ?,"
@@ -265,6 +299,7 @@ def decidir_validacao(con, id_validacao: int, aprovar: bool, parecer: str,
             "UPDATE item_catalogo SET status_ciclo_vida = 'rascunho',"
             " atualizado_em = datetime('now') WHERE id_item = ? "
             "AND status_ciclo_vida = 'em_validacao'", (id_item,))
+        _avisar_autor_da_rejeicao(con, id_item, val, parecer, usuario)
         con.commit()
         return {"situacao": "rejeitada", "publicado": False}
 
@@ -280,6 +315,54 @@ def decidir_validacao(con, id_validacao: int, aprovar: bool, parecer: str,
     return {"situacao": "aprovada", "publicado": True}
 
 
+def _avisar_autor_da_rejeicao(con, id_item: int, val, parecer: str,
+                              usuario: str) -> None:
+    from . import acesso, notificacoes
+
+    revisao = con.execute("SELECT criado_por FROM revisao_catalogo WHERE id_revisao = ?",
+                          (val["id_revisao"],)).fetchone()
+    if revisao is None or not revisao["criado_por"]:
+        return
+    autor = acesso.pessoa_por_login(con, revisao["criado_por"])
+    if autor is None:
+        return
+    item = con.execute("SELECT nome, codigo FROM item_catalogo WHERE id_item = ?",
+                       (id_item,)).fetchone()
+    notificacoes.registrar(
+        con, autor["id_pessoa"], "revisao_rejeitada",
+        f"Revisão de {item['nome']} rejeitada na etapa {val['etapa']}",
+        parecer or "Sem parecer registrado.",
+        url=f"/ativo/{id_item}", id_item=id_item,
+        id_validacao=val["id_validacao"],
+        chave_unica=f"revisao_rejeitada:{val['id_validacao']}")
+
+
+def _avisar_consumidores(con, id_item: int, usuario: str) -> None:
+    """Avisa quem responde pelos ativos que consomem o que acabou de publicar."""
+    from . import notificacoes
+
+    item = con.execute("SELECT nome, codigo FROM item_catalogo WHERE id_item = ?",
+                       (id_item,)).fetchone()
+    vistos: set[int] = set()
+    destinatarios = []
+    for consumidor in governanca.impacto_descontinuacao(con, id_item):
+        for linha in con.execute(
+                "SELECT DISTINCT p.id_pessoa FROM responsabilidade r "
+                "JOIN pessoa p ON p.id_pessoa = r.id_pessoa "
+                "WHERE r.id_item = ? AND r.fim_vigencia IS NULL AND p.ativo = 1",
+                (consumidor["id_item"],)):
+            if linha["id_pessoa"] not in vistos:
+                vistos.add(linha["id_pessoa"])
+                destinatarios.append({"id_pessoa": linha["id_pessoa"]})
+    if destinatarios:
+        notificacoes.para_muitos(
+            con, destinatarios, "ativo_publicado",
+            f"{item['nome']} publicou uma nova revisão",
+            f"{item['codigo']} é consumido por um ativo sob sua responsabilidade.",
+            url=f"/ativo/{id_item}", id_item=id_item,
+            sufixo_chave=f"ativo_publicado:{id_item}:{date.today().isoformat()}")
+
+
 def publicar(con, id_item: int, id_revisao: int, usuario: str = "sistema") -> None:
     con.execute(
         "UPDATE revisao_catalogo SET publicada_em = datetime('now') WHERE id_revisao = ?",
@@ -291,6 +374,7 @@ def publicar(con, id_item: int, id_revisao: int, usuario: str = "sistema") -> No
         (id_revisao, id_item))
     auditar(con, id_item, "publicar", usuario, depois={"id_revisao": id_revisao})
     qualidade.registrar(con, id_item)
+    _avisar_consumidores(con, id_item, usuario)
     con.commit()
 
 
@@ -740,6 +824,114 @@ def arvore(con, tipo_raiz: str) -> list[dict]:
         if pai is not None:
             pai["filhos"].append(no)
     return [n for n in nos.values() if n["tipo_item"] == tipo_raiz]
+
+
+def vizinhanca(con, id_item: int, saltos: int = 1, tipos_relacao: tuple = (),
+               teto: int = 150) -> dict:
+    """Vizinhança de N saltos no grafo de relações, com teto explícito.
+
+    As árvores do mapa mostram a hierarquia; isto mostra o que elas não
+    alcançam — as relações transversais que cruzam domínios e sistemas. A
+    expansão trata as arestas como não direcionadas (quem consome importa tanto
+    quanto quem é consumido), mas cada aresta devolvida preserva a direção real.
+
+    `truncado` faz parte do contrato: um recorte silencioso faria a tela mentir
+    sobre o alcance da mudança.
+    """
+    saltos = max(1, min(int(saltos), 3))
+    filtro = ""
+    params_filtro: list = []
+    if tipos_relacao:
+        marcas = ",".join("?" * len(tipos_relacao))
+        filtro = f" AND r.tipo_relacao IN ({marcas})"
+        params_filtro = list(tipos_relacao)
+
+    distancias = {id_item: 0}
+    fronteira = [id_item]
+    truncado = False
+    for salto in range(1, saltos + 1):
+        if not fronteira or truncado:
+            break
+        marcas = ",".join("?" * len(fronteira))
+        vizinhos = con.execute(
+            "SELECT r.id_origem, r.id_destino FROM relacionamento_ativo r"
+            f" WHERE r.fim_vigencia IS NULL{filtro}"
+            f" AND (r.id_origem IN ({marcas}) OR r.id_destino IN ({marcas}))",
+            [*params_filtro, *fronteira, *fronteira]).fetchall()
+        proxima = []
+        for linha in vizinhos:
+            for lado in (linha["id_origem"], linha["id_destino"]):
+                if lado in distancias:
+                    continue
+                if len(distancias) >= teto:
+                    truncado = True
+                    break
+                distancias[lado] = salto
+                proxima.append(lado)
+            if truncado:
+                break
+        fronteira = proxima
+
+    ids = list(distancias)
+    marcas = ",".join("?" * len(ids))
+    nos = [{**dict(l), "salto": distancias[l["id_item"]]} for l in con.execute(
+        "SELECT i.id_item, i.codigo, i.nome, i.tipo_item, i.status_ciclo_vida,"
+        " i.criticidade FROM item_catalogo i"
+        f" WHERE i.id_item IN ({marcas})", ids)]
+    arestas = [dict(l) for l in con.execute(
+        "SELECT r.id_origem, r.id_destino, r.tipo_relacao, r.criticidade,"
+        " r.mecanismo FROM relacionamento_ativo r"
+        f" WHERE r.fim_vigencia IS NULL{filtro}"
+        f" AND r.id_origem IN ({marcas}) AND r.id_destino IN ({marcas})",
+        [*params_filtro, *ids, *ids])]
+    nos.sort(key=lambda n: (n["salto"], n["nome"]))
+    return {"centro": id_item, "saltos": saltos, "nos": nos, "arestas": arestas,
+            "truncado": truncado, "teto": teto}
+
+
+def posicionar_vizinhanca(dados: dict, largura: int = 900, altura: int = 560) -> dict:
+    """Coloca os nós em anéis concêntricos por distância do centro.
+
+    Layout escrito à mão, sem biblioteca: o anel diz a distância de relação e a
+    leitura fica estável entre visitas — o mesmo grafo desenha igual toda vez,
+    o que um layout de força não garante.
+    """
+    cx, cy = largura / 2, altura / 2
+    # anéis elípticos: a tela é mais larga que alta, e um raio único deixaria
+    # metade do desenho vazia
+    rx_max, ry_max = largura / 2 - 160, altura / 2 - 50
+    por_salto: dict[int, list] = {}
+    for no in dados["nos"]:
+        por_salto.setdefault(no["salto"], []).append(no)
+
+    saltos = max(por_salto) if por_salto else 0
+    posicoes = {}
+    for salto, nos in sorted(por_salto.items()):
+        if salto == 0:
+            for no in nos:
+                posicoes[no["id_item"]] = (cx, cy)
+            continue
+        fracao = salto / max(saltos, 1)
+        rx, ry = rx_max * fracao, ry_max * fracao
+        # cada anel gira um pouco para os nós não ficarem alinhados em raios
+        giro = math.pi / (len(nos) or 1) * (salto % 2)
+        for indice, no in enumerate(nos):
+            angulo = 2 * math.pi * indice / len(nos) + giro
+            posicoes[no["id_item"]] = (cx + rx * math.cos(angulo),
+                                       cy + ry * math.sin(angulo))
+
+    nos = [{**no, "x": round(posicoes[no["id_item"]][0], 1),
+            "y": round(posicoes[no["id_item"]][1], 1)} for no in dados["nos"]]
+    arestas = []
+    for a in dados["arestas"]:
+        if a["id_origem"] not in posicoes or a["id_destino"] not in posicoes:
+            continue
+        x1, y1 = posicoes[a["id_origem"]]
+        x2, y2 = posicoes[a["id_destino"]]
+        arestas.append({**a, "x1": round(x1, 1), "y1": round(y1, 1),
+                        "x2": round(x2, 1), "y2": round(y2, 1)})
+    return {**dados, "nos": nos, "arestas": arestas,
+            "largura": largura, "altura": altura}
 
 
 def analise_impacto(con, id_item: int) -> dict:

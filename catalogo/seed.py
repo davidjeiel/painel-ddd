@@ -39,12 +39,30 @@ def carregar(con) -> dict:
 
     ids_pessoa = {}
     for matricula, nome, email, perfil, squad in PESSOAS:
+        login = email.split("@")[0]
         cur = con.execute(
-            "INSERT OR IGNORE INTO pessoa (matricula, nome, email, perfil, id_squad) "
-            "VALUES (?,?,?,?,?)", (matricula, nome, email, perfil, ids_squad[squad]))
+            "INSERT OR IGNORE INTO pessoa (matricula, nome, email, perfil, id_squad,"
+            " login) VALUES (?,?,?,?,?,?)",
+            (matricula, nome, email, perfil, ids_squad[squad], login))
         ids_pessoa[matricula] = cur.lastrowid or con.execute(
             "SELECT id_pessoa FROM pessoa WHERE matricula = ?", (matricula,)).fetchone()[0]
     con.commit()
+
+    # o perfil declarado no cadastro vira papel efetivo, de escopo global no
+    # piloto; a expansão corporativa é que dará escopo por domínio
+    from . import acesso
+    for matricula, _, _, perfil, _ in PESSOAS:
+        ja_tem = con.execute(
+            "SELECT 1 FROM atribuicao_papel WHERE id_pessoa = ? AND papel = ?",
+            (ids_pessoa[matricula], perfil)).fetchone()
+        if not ja_tem and perfil in acesso.PAPEIS:
+            acesso.conceder(con, ids_pessoa[matricula], perfil,
+                            concedido_por="carga.piloto")
+    # uma pessoa com papel de curador global para operar o piloto de ponta a ponta
+    curador = ids_pessoa["M1006"]
+    if not con.execute("SELECT 1 FROM atribuicao_papel WHERE id_pessoa = ? "
+                       "AND papel = 'admin'", (curador,)).fetchone():
+        acesso.conceder(con, curador, "admin", concedido_por="carga.piloto")
 
     u = "carga.piloto"
     novo = lambda **kw: servicos.criar_item(con, usuario=u, **kw)

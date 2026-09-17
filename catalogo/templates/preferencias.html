@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block titulo %}Preferências de notificação{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Preferências de notificação</h1>
+  <p>Notificação que vira ruído é desligada e deixa de existir. Escolha o que importa.</p>
+</div>
+
+<div class="abas">
+  <a href="{{ url_for('web.caixa_notificacoes') }}">Caixa</a>
+  <a href="{{ url_for('web.preferencias_notificacao') }}" class="ativo">Preferências</a>
+</div>
+
+<form method="post">
+  <div class="cartao">
+    <div class="rolagem">
+      <table>
+        <thead>
+          <tr><th scope="col">Evento</th>
+            {% for chave, rotulo in canais.items() %}
+              <th scope="col">{{ rotulo }}
+                {%- if chave not in disponiveis %} <span class="discreto">(indisponível)</span>{% endif %}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+        {% for tipo, meta in tipos.items() %}
+          <tr>
+            <td><strong>{{ meta.rotulo }}</strong>
+              <div class="discreto">{{ 'na hora' if meta.urgente else 'pode esperar o resumo' }}</div></td>
+            {% for canal in canais %}
+              <td><input type="checkbox" name="pref" value="{{ tipo }}:{{ canal }}"
+                     {{ 'checked' if preferencias[tipo][canal] }}
+                     {{ 'disabled' if canal not in disponiveis }}
+                     aria-label="{{ meta.rotulo }} por {{ canais[canal] }}"></td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="acoes" style="margin-top:14px">
+      <button type="submit">Salvar preferências</button>
+    </div>
+    <p class="discreto" style="margin-top:12px">
+      Os canais de e-mail e Teams ficam desligados até a fonte de identidade corporativa
+      ser decidida: sem ela não há endereço confiável para onde mandar. A estrutura já
+      existe — só falta a decisão.
+    </p>
+  </div>
+</form>
+{% endblock %}

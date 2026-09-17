@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block titulo %}Seu perfil{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Seu perfil</h1>
+  <p>Quem assina as publicações que geram hash e trilha de auditoria, e em que modo
+     você está trabalhando.</p>
+</div>
+
+<div class="grade duas">
+  <div>
+    <div class="cartao">
+      <h2>Identificação</h2>
+      <form method="post">
+        <input type="hidden" name="destino" value="{{ destino }}">
+        <div class="campo">
+          <label for="id_pessoa">Você é</label>
+          <select id="id_pessoa" name="id_pessoa">
+            <option value="">Ninguém identificado</option>
+            {% for p in pessoas %}
+              <option value="{{ p.id_pessoa }}" {{ 'selected' if pessoa and pessoa.id_pessoa == p.id_pessoa }}>{{ p.nome }} — {{ p.perfil }}{{ ' · ' ~ p.squad if p.squad }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <fieldset class="campo modos">
+          <legend>Modo de trabalho</legend>
+          <label class="inline"><input type="radio" name="modo" value="edicao"
+            {{ 'checked' if not leitura }}> <span><strong>Edição</strong> — cadastrar,
+            relacionar e decidir conforme o seu papel</span></label>
+          <label class="inline"><input type="radio" name="modo" value="leitura"
+            {{ 'checked' if leitura }}> <span><strong>Leitura</strong> — os formulários
+            de escrita somem da tela</span></label>
+        </fieldset>
+        <button type="submit">Salvar perfil</button>
+      </form>
+      <p class="discreto" style="margin-top:14px">
+        Enquanto a fonte de identidade corporativa não é decidida, a pessoa é escolhida
+        aqui. Quando o SSO entrar, esta tela perde o seletor e mantém o resto — papéis,
+        escopos e regras não mudam.
+      </p>
+    </div>
+
+    <div class="cartao">
+      <h2>O que cada papel permite</h2>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th scope="col">Ação</th><th scope="col">Papéis</th></tr></thead>
+          <tbody>
+          {% for acao, papeis_da_acao in permissoes.items() %}
+            <tr><td>{{ acao }}</td>
+                <td class="discreto">{{ papeis_da_acao|sort|join(', ') }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3>Quem decide cada etapa de validação</h3>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th scope="col">Etapa</th><th scope="col">Papel exigido</th></tr></thead>
+          <tbody>
+          {% for etapa, papeis_da_etapa in etapas.items() %}
+            <tr><td>{{ etapa }}</td>
+                <td class="discreto">{{ papeis_da_etapa|sort|join(', ') }}
+                  <span class="discreto">ou o responsável formal pelo ativo</span></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="discreto">Quem submeteu uma revisão não decide sobre ela — segregação de função.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="cartao">
+      <h2>Seus papéis</h2>
+      {% if not pessoa %}
+        <p class="vazio">Identifique-se ao lado para ver os papéis atribuídos a você.</p>
+      {% elif papeis %}
+        <table>
+          <thead><tr><th scope="col">Papel</th><th scope="col">Escopo</th>
+                     <th scope="col">Desde</th></tr></thead>
+          <tbody>
+          {% for p in papeis %}
+            <tr><td><strong>{{ catalogo_papeis.get(p.papel, p.papel) }}</strong></td>
+                <td class="discreto">{{ p.escopo_tipo }}{{ ' #' ~ p.escopo_id if p.escopo_id }}</td>
+                <td class="discreto">{{ p.inicio_vigencia }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="vazio">Nenhum papel atribuído: você consegue consultar o catálogo, mas
+          não escrever nele. Um administrador concede papéis por
+          <span class="mono">flask --app catalogo conceder &lt;login&gt; &lt;papel&gt;</span>.</p>
+      {% endif %}
+    </div>
+
+    <div class="cartao">
+      <h2>Modo atual</h2>
+      <p>
+        <span class="etiqueta {{ 'em_revisao' if leitura else 'publicado' }}">
+          {{ 'Leitura' if leitura else 'Edição' }}</span>
+      </p>
+      <p class="discreto">
+        {% if leitura %}
+          Os formulários de escrita estão escondidos e as rotas de escrita recusam a ação.
+        {% else %}
+          Você vê as ações que o seu papel permite. O que não aparece é o que você não pode fazer.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

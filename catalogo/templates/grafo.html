@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block titulo %}Grafo · {{ item.nome }}{% endblock %}
+
+{% block conteudo %}
+{% set atual = item.nome ~ ' · grafo' %}
+{% include "_trilha.html" with context %}
+<div class="cabecalho">
+  <h1>Grafo de {{ item.nome }}</h1>
+  <p>As árvores do mapa mostram a hierarquia; aqui estão as relações transversais —
+     o que cruza domínios e sistemas.</p>
+</div>
+
+<div class="cartao">
+  <form method="get" class="linha-campos filtros" style="align-items:end">
+    <div class="campo">
+      <label for="saltos">Distância</label>
+      <select id="saltos" name="saltos" onchange="this.form.submit()">
+        {% for n in [1, 2, 3] %}
+          <option value="{{ n }}" {{ 'selected' if dados.saltos == n }}>{{ n }} salto{{ 's' if n > 1 }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <fieldset class="campo caixas-tipo">
+      <legend>Tipos de relação <span class="discreto">(vazio = todos)</span></legend>
+      <div class="caixas">
+        {% for chave, rotulo in relacoes.items() %}
+          <label class="inline"><input type="checkbox" name="tipo" value="{{ chave }}"
+            {{ 'checked' if chave in escolhidos }} onchange="this.form.submit()">
+            {{ chave }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="campo acoes">
+      <noscript><button type="submit" class="secundario">Aplicar</button></noscript>
+      <a class="botao secundario" href="{{ url_for('web.detalhe', id_item=item.id_item, aba='relacoes') }}">Ver em tabela</a>
+    </div>
+  </form>
+</div>
+
+{% if dados.truncado %}
+  <div class="aviso erro" role="status">
+    O grafo passou de {{ dados.teto }} ativos e foi cortado. Reduza a distância ou filtre
+    por tipo de relação — o que está fora daqui continua existindo.
+  </div>
+{% endif %}
+
+<div class="grade duas">
+  <div class="cartao">
+    <h2>{{ dados.nos|length }} ativo(s), {{ dados.arestas|length }} relação(ões)</h2>
+    <div class="rolagem">
+      <svg class="grafo" viewBox="0 0 {{ dados.largura }} {{ dados.altura }}"
+           role="img" aria-labelledby="grafo-descricao">
+        <title id="grafo-descricao">Grafo de relações de {{ item.nome }} com
+          {{ dados.nos|length }} ativos em até {{ dados.saltos }} salto(s)</title>
+        <defs>
+          <marker id="ponta" viewBox="0 0 10 10" refX="10" refY="5"
+                  markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--linha-forte, #b9c3d4)"></path>
+          </marker>
+        </defs>
+
+        {% for a in dados.arestas %}
+          <line class="aresta {{ a.criticidade }}" x1="{{ a.x1 }}" y1="{{ a.y1 }}"
+                x2="{{ a.x2 }}" y2="{{ a.y2 }}" marker-end="url(#ponta)">
+            <title>{{ a.tipo_relacao }}{{ ' · ' ~ a.mecanismo if a.mecanismo }} · {{ a.criticidade }}</title>
+          </line>
+        {% endfor %}
+
+        {% for n in dados.nos %}
+          <a href="{{ url_for('web.grafo', id_item=n.id_item, saltos=dados.saltos) }}">
+            <g class="no-grafo salto-{{ n.salto }} {{ 'centro' if n.salto == 0 }}">
+              <circle cx="{{ n.x }}" cy="{{ n.y }}" r="{{ 13 if n.salto == 0 else 8 }}"
+                      class="{{ n.criticidade }}"></circle>
+              <text x="{{ n.x }}" y="{{ n.y - (20 if n.salto == 0 else 14) }}"
+                    text-anchor="middle">{{ n.nome[:26] }}</text>
+              <title>{{ n.nome }} · {{ n.tipo_item|rotulo_tipo }} · {{ n.codigo }}
+                · {{ n.status_ciclo_vida|rotulo_status }}</title>
+            </g>
+          </a>
+        {% endfor %}
+      </svg>
+    </div>
+    <div class="legenda-grafo">
+      <span><i class="ponto centro"></i> ativo central</span>
+      <span><i class="ponto critica"></i> criticidade crítica</span>
+      <span><i class="ponto alta"></i> alta</span>
+      <span class="discreto">Clique num nó para recentrar o grafo nele.</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="cartao">
+      <h2>Quem depende deste ativo</h2>
+      {% if analise.total %}
+        <p class="discreto">{{ analise.total }} consumidor(es) vigente(s)
+          {%- if analise.criticos %}, <strong class="score ruim">{{ analise.criticos|length }} de alta criticidade</strong>{% endif %}.</p>
+        <ul class="evidencias">
+          {% for c in analise.consumidores %}
+            <li><a href="{{ url_for('web.grafo', id_item=c.id_item) }}">{{ c.nome }}</a>
+              <span class="discreto">{{ c.tipo_relacao }} · {{ c.criticidade }}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="vazio">Nenhum ativo vigente depende deste.</p>
+      {% endif %}
+    </div>
+
+    <div class="cartao">
+      <h2>Ativos no grafo</h2>
+      <div class="rolagem" style="max-height:380px;overflow-y:auto">
+        <table>
+          <thead><tr><th scope="col">Ativo</th><th scope="col">Tipo</th>
+                     <th scope="col">Salto</th></tr></thead>
+          <tbody>
+          {% for n in dados.nos %}
+            <tr class="{{ 'linha-atual' if n.salto == 0 }}">
+              <td><a href="{{ url_for('web.detalhe', id_item=n.id_item) }}">{{ n.nome }}</a>
+                  <div class="mono discreto">{{ n.codigo }}</div></td>
+              <td>{{ n.tipo_item|rotulo_tipo }}</td>
+              <td class="discreto">{{ n.salto }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

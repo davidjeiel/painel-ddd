@@ -30,7 +30,9 @@ núcleo.
 | Tabela | Papel |
 | --- | --- |
 | `item_catalogo` | Núcleo: identidade, tipo, hierarquia, status, criticidade, vigência, revisão corrente e `origem` (manual ou automatica) |
-| `squad`, `pessoa` | Organização; a fonte de identidade corporativa entra aqui na integração |
+| `squad`, `pessoa` | Organização; `login`, `identidade_externa` e `origem_identidade` recebem a identidade corporativa quando o SSO entrar |
+| `atribuicao_papel` | Papel × escopo (global, domínio ou squad), com vigência |
+| `notificacao`, `preferencia_notificacao` | Outbox de avisos e o que cada pessoa quer receber |
 | `responsabilidade` | Ownership por papel com vigência (N:N pessoa × item) |
 | `relacionamento_ativo` | Grafo tipado entre ativos, com criticidade, mecanismo e origem |
 | `politica_governanca` | Rito por tipo e criticidade: etapas, evidência mínima, score, SLA, revisão |

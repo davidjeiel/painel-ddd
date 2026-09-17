@@ -20,8 +20,28 @@ CREATE TABLE IF NOT EXISTS pessoa (
     email        TEXT,
     perfil       TEXT NOT NULL DEFAULT 'consulta',  -- curador|arquiteto|tech_lead|negocio|consulta
     id_squad     INTEGER REFERENCES squad(id_squad),
-    ativo        INTEGER NOT NULL DEFAULT 1
+    ativo        INTEGER NOT NULL DEFAULT 1,
+    login             TEXT,      -- identificador usado na trilha de auditoria
+    identidade_externa TEXT,     -- 'sub' do provedor quando houver SSO
+    origem_identidade  TEXT NOT NULL DEFAULT 'local'  -- local|oidc|ldap
 );
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pessoa_login ON pessoa(login)
+    WHERE login IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pessoa_identidade ON pessoa(identidade_externa)
+    WHERE identidade_externa IS NOT NULL;
+
+-- Papel com escopo: a governança é por domínio, a autorização também.
+CREATE TABLE IF NOT EXISTS atribuicao_papel (
+    id_atribuicao   INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_pessoa       INTEGER NOT NULL REFERENCES pessoa(id_pessoa) ON DELETE CASCADE,
+    papel           TEXT NOT NULL,   -- admin|curador|arquiteto|tech_lead|negocio|consulta
+    escopo_tipo     TEXT NOT NULL DEFAULT 'global',  -- global|dominio|squad
+    escopo_id       INTEGER,         -- id_item do domínio, ou id_squad
+    inicio_vigencia TEXT NOT NULL DEFAULT (date('now')),
+    fim_vigencia    TEXT,
+    concedido_por   TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_papel_pessoa ON atribuicao_papel(id_pessoa, fim_vigencia);
 
 -- ------------------------------------------------------------------- núcleo
 CREATE TABLE IF NOT EXISTS item_catalogo (
@@ -126,6 +146,37 @@ CREATE TABLE IF NOT EXISTS evidencia (
     url          TEXT,
     origem       TEXT NOT NULL DEFAULT 'manual',
     criado_em    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ------------------------------------------------------------- notificações
+-- Padrão outbox: o caso de uso grava aqui dentro da própria transação e um
+-- comando agendado despacha. Sem serviço auxiliar, e sobrevive a reinício.
+CREATE TABLE IF NOT EXISTS notificacao (
+    id_notificacao INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_pessoa      INTEGER NOT NULL REFERENCES pessoa(id_pessoa) ON DELETE CASCADE,
+    tipo           TEXT NOT NULL,
+    id_item        INTEGER REFERENCES item_catalogo(id_item) ON DELETE CASCADE,
+    id_validacao   INTEGER REFERENCES validacao(id_validacao) ON DELETE CASCADE,
+    titulo         TEXT NOT NULL,
+    corpo          TEXT,
+    url            TEXT,
+    chave_unica    TEXT,       -- evita alerta repetido do mesmo fato no mesmo dia
+    criado_em      TEXT NOT NULL DEFAULT (datetime('now')),
+    lido_em        TEXT,
+    enviado_em     TEXT,       -- nulo = ainda na outbox
+    canal          TEXT NOT NULL DEFAULT 'app'
+);
+CREATE INDEX IF NOT EXISTS ix_notif_pendente ON notificacao(enviado_em);
+CREATE INDEX IF NOT EXISTS ix_notif_pessoa   ON notificacao(id_pessoa, lido_em);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_notif_chave ON notificacao(chave_unica)
+    WHERE chave_unica IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS preferencia_notificacao (
+    id_pessoa INTEGER NOT NULL REFERENCES pessoa(id_pessoa) ON DELETE CASCADE,
+    tipo      TEXT NOT NULL,
+    canal     TEXT NOT NULL DEFAULT 'app',
+    ativo     INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (id_pessoa, tipo, canal)
 );
 
 CREATE TABLE IF NOT EXISTS auditoria_evento (

@@ -84,7 +84,7 @@
         {% endif %}
       </div>
 
-      {% if item.status_ciclo_vida in ('rascunho','em_revisao') %}
+      {% if item.status_ciclo_vida in ('rascunho','em_revisao') and pode('editar', item.id_item) %}
       <details class="escrever">
         <summary>Editar nome, descrição e campos do tipo</summary>
         <form method="post" action="{{ url_for('web.editar', id_item=item.id_item) }}">
@@ -159,8 +159,12 @@
         {% else %}
           <p class="vazio">Nenhuma relação registrada. Vincule este ativo a uma capacidade abaixo.</p>
         {% endif %}
-        <p><a class="botao secundario"
-              href="{{ url_for('web.relacoes_lote', id_item=item.id_item) }}">Registrar várias de uma vez</a></p>
+        <div class="acoes">
+          <a class="botao secundario" href="{{ url_for('web.grafo', id_item=item.id_item) }}">Ver como grafo</a>
+          {% if pode('relacionar', item.id_item) %}
+            <a class="botao secundario" href="{{ url_for('web.relacoes_lote', id_item=item.id_item) }}">Registrar várias de uma vez</a>
+          {% endif %}
+        </div>
       </div>
 
       {# --------------------------------------------- P16: quem depende daqui #}
@@ -194,6 +198,7 @@
       </div>
 
       {# ----------------------------------- P11: seletor com busca e mecanismo #}
+      {% if pode('relacionar', item.id_item) %}
       <details class="escrever" {{ 'open' if not (relacoes_saida or relacoes_entrada) }}>
         <summary>Registrar relação</summary>
         <form method="post" action="{{ url_for('web.relacao', id_item=item.id_item) }}"
@@ -237,6 +242,7 @@
           </div>
         </form>
       </details>
+      {% endif %}
     </section>
 
     <!-- ----------------------------------------------------------- pessoas -->
@@ -257,6 +263,7 @@
           {{ 'owner negocial' if t.exige_owner_negocial }}{{ ' e ' if t.exige_owner_negocial and t.exige_owner_tecnico }}{{ 'owner técnico' if t.exige_owner_tecnico }}{{ 'nenhum papel obrigatório' if not (t.exige_owner_negocial or t.exige_owner_tecnico) }}.</p>
       </div>
 
+      {% if pode('editar', item.id_item) %}
       <details class="escrever" {{ 'open' if not responsaveis }}>
         <summary>Definir responsável</summary>
         <form method="post" action="{{ url_for('web.responsavel', id_item=item.id_item) }}"
@@ -279,6 +286,7 @@
           <div class="campo acoes"><button type="submit" class="secundario">Definir responsável</button></div>
         </form>
       </details>
+      {% endif %}
     </section>
 
     <!-- -------------------------------------------------------- evidências -->
@@ -300,6 +308,7 @@
           {{ precheck.politica.evidencia_minima }} evidência(s) para publicar.</p>
       </div>
 
+      {% if pode('editar', item.id_item) %}
       <details class="escrever" {{ 'open' if evidencias|length < precheck.politica.evidencia_minima }}>
         <summary>Anexar evidência</summary>
         <form method="post" action="{{ url_for('web.evidencia', id_item=item.id_item) }}"
@@ -319,6 +328,7 @@
           <div class="campo acoes"><button type="submit" class="secundario">Anexar evidência</button></div>
         </form>
       </details>
+      {% endif %}
     </section>
 
     <!-- --------------------------------------------------------- histórico -->
@@ -386,13 +396,13 @@
 
     <div class="cartao">
       <h2>Ações</h2>
-      {% if item.status_ciclo_vida in ('rascunho', 'em_revisao') %}
+      {% if item.status_ciclo_vida in ('rascunho', 'em_revisao') and pode('submeter', item.id_item) %}
         <form method="post" action="{{ url_for('web.submeter', id_item=item.id_item) }}">
           <div class="campo"><label for="motivo">Motivo da revisão</label>
             <input type="text" id="motivo" name="motivo" placeholder="o que mudou e por quê"></div>
           <button type="submit">Enviar para validação</button>
         </form>
-      {% elif item.status_ciclo_vida == 'publicado' %}
+      {% elif item.status_ciclo_vida == 'publicado' and pode('revisar', item.id_item) %}
         <form method="post" action="{{ url_for('web.revisar', id_item=item.id_item) }}">
           <button type="submit">Abrir revisão</button>
         </form>
@@ -404,34 +414,54 @@
         <p class="discreto">Ativo fora de uso, mantido para rastreabilidade.</p>
       {% endif %}
 
-      {% if item.status_ciclo_vida in ('publicado', 'em_revisao') %}
-        <h3>Descontinuar</h3>
-        {% if analise.total %}
-          <p class="discreto">{{ analise.total }} consumidor(es) vigente(s) seriam afetados
-            {%- if analise.criticos %}, <strong class="score ruim">{{ analise.criticos|length }} de alta criticidade</strong>{% endif %}.</p>
-          <details class="impacto">
-            <summary>Ver quem seria afetado</summary>
-            <ul>
-              {% for c in analise.consumidores %}
-                <li><a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
-                  <span class="discreto">{{ c.tipo_relacao }} · {{ c.criticidade }}</span></li>
-              {% endfor %}
-            </ul>
-          </details>
-        {% else %}
-          <p class="discreto">Nenhum consumidor vigente seria afetado.</p>
-        {% endif %}
-        <form method="post" action="{{ url_for('web.descontinuar', id_item=item.id_item) }}">
-          <div class="campo"><label for="motivo_desc">Motivo</label>
-            <input type="text" id="motivo_desc" name="motivo" required></div>
-          <label class="inline"><input type="checkbox" name="forcar">
-            Plano de migração acordado com os consumidores</label>
-          <div class="acoes" style="margin-top:10px">
-            <button type="submit" class="perigo">Descontinuar ativo</button>
-          </div>
-        </form>
+      {% if item.status_ciclo_vida in ('publicado', 'em_revisao') and pode('descontinuar', item.id_item) %}
+        <p class="discreto">Descontinuar este ativo é uma ação à parte, no cartão abaixo.</p>
       {% endif %}
     </div>
+
+    {# ------------------------------- P18: ação irreversível em cartão próprio #}
+    {% if item.status_ciclo_vida in ('publicado', 'em_revisao') and pode('descontinuar', item.id_item) %}
+    <div class="cartao perigoso">
+      <h2>Descontinuar ativo</h2>
+      {% if analise.total %}
+        <p class="discreto">{{ analise.total }} consumidor(es) vigente(s) seriam afetados
+          {%- if analise.criticos %}, <strong class="score ruim">{{ analise.criticos|length }} de alta criticidade</strong>{% endif %}.</p>
+        <details class="impacto" {{ 'open' if analise.criticos }}>
+          <summary>Ver quem seria afetado</summary>
+          <ul>
+            {% for c in analise.consumidores %}
+              <li><a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
+                <span class="discreto">{{ c.tipo_relacao }} · {{ c.criticidade }}</span></li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% else %}
+        <p class="discreto">Nenhum consumidor vigente seria afetado.</p>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('web.descontinuar', id_item=item.id_item) }}"
+            id="form-descontinuar">
+        <div class="campo"><label for="motivo_desc">Motivo</label>
+          <input type="text" id="motivo_desc" name="motivo" required
+                 placeholder="por que este ativo sai de uso"></div>
+        {% if analise.criticos %}
+          <div class="campo">
+            <label for="confirmacao">Confirme digitando o código
+              <span class="mono">{{ item.codigo }}</span></label>
+            <input type="text" id="confirmacao" name="confirmacao" autocomplete="off"
+                   aria-describedby="ajuda-confirmacao">
+            <span id="ajuda-confirmacao" class="discreto">Há consumidor de alta
+              criticidade: a confirmação evita o clique acidental.</span>
+          </div>
+        {% endif %}
+        <label class="inline"><input type="checkbox" name="forcar">
+          Plano de migração acordado com os consumidores</label>
+        <div class="acoes" style="margin-top:12px">
+          <button type="submit" class="perigo">Descontinuar ativo</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
 
     <div class="cartao">
       <h2>Dimensões de qualidade</h2>
