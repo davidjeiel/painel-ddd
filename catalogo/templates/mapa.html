@@ -1,52 +1,132 @@
 {% extends "base.html" %}
-{% block titulo %}Mapa DDD{% endblock %}
+{% block titulo %}Mapa do catálogo{% endblock %}
+
+{# Um nó e seus filhos, em qualquer profundidade: a hierarquia é sempre id_pai,
+   então a mesma macro desenha a árvore de negócio e a técnica. #}
+{% macro no(n, nivel=0) %}
+  <li class="no" data-busca="{{ (n.nome ~ ' ' ~ n.codigo)|lower }}">
+    {% if n.filhos %}
+      <details {{ 'open' if nivel < 1 }}>
+        <summary>
+          <span class="rotulo">{{ n.nome }}</span>
+          <span class="discreto">{{ n.tipo_item|rotulo_tipo }} · {{ n.filhos|length }}</span>
+          {{ marcas(n) }}
+        </summary>
+        <ul class="arvore">
+          {% for f in n.filhos %}{{ no(f, nivel + 1) }}{% endfor %}
+        </ul>
+      </details>
+    {% else %}
+      <div class="folha">
+        <span class="rotulo">{{ n.nome }}</span>
+        <span class="discreto">{{ n.tipo_item|rotulo_tipo }}</span>
+        {{ marcas(n) }}
+      </div>
+    {% endif %}
+  </li>
+{% endmacro %}
+
+{% macro marcas(n) %}
+  <a class="abrir" href="{{ url_for('web.detalhe', id_item=n.id_item) }}">abrir</a>
+  {% if n.tipo_item == 'capacidade' %}
+    {% if n.implementacoes %}
+      <span class="etiqueta publicado">{{ n.implementacoes }} implementação(ões)</span>
+    {% else %}
+      <span class="etiqueta alta">sem implementação</span>
+    {% endif %}
+  {% endif %}
+  {% if n.status_ciclo_vida != 'publicado' %}
+    <span class="etiqueta {{ n.status_ciclo_vida }}">{{ n.status_ciclo_vida|rotulo_status }}</span>
+  {% endif %}
+{% endmacro %}
 
 {% block conteudo %}
 <div class="cabecalho">
-  <h1>Mapa DDD</h1>
-  <p>Domínio → Subdomínio → Bounded Context → Capacidade, com cobertura de implementação.</p>
+  <h1>Mapa do catálogo</h1>
+  <p>As duas hierarquias do modelo, lado a lado: a de negócio e a técnica.</p>
+</div>
+
+<div class="abas">
+  <a href="{{ url_for('web.mapa', visao='negocio') }}" class="{{ 'ativo' if visao == 'negocio' }}">
+    Negócio <span class="conta">{{ totais.negocio }}</span></a>
+  <a href="{{ url_for('web.mapa', visao='tecnica') }}" class="{{ 'ativo' if visao == 'tecnica' }}">
+    Tecnologia <span class="conta">{{ totais.tecnica }}</span></a>
 </div>
 
 <div class="cartao">
-  {% for d in arvore %}
-    <h2><a href="{{ url_for('web.detalhe', id_item=d.id_item) }}">{{ d.nome }}</a>
-      <span class="etiqueta {{ d.status_ciclo_vida }}">{{ d.status_ciclo_vida|rotulo_status }}</span></h2>
-    <ul class="arvore">
-      {% for s in d.subdominios %}
-        <li>
-          <span class="no-raiz"><a href="{{ url_for('web.detalhe', id_item=s.id_item) }}">{{ s.nome }}</a></span>
-          <ul class="arvore">
-            {% for c in s.contextos %}
-              <li>
-                <a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
-                <span class="discreto">contexto</span>
-                <ul class="arvore">
-                  {% for cap in c.capacidades %}
-                    <li>
-                      <a href="{{ url_for('web.detalhe', id_item=cap.id_item) }}">{{ cap.nome }}</a>
-                      {% if cap.implementacoes %}
-                        <span class="etiqueta publicado">{{ cap.implementacoes }} implementação(ões)</span>
-                      {% else %}
-                        <span class="etiqueta alta">sem implementação</span>
-                      {% endif %}
-                    </li>
-                  {% else %}
-                    <li class="discreto">nenhuma capacidade cadastrada</li>
-                  {% endfor %}
-                </ul>
-              </li>
-            {% else %}
-              <li class="discreto">nenhum contexto cadastrado</li>
-            {% endfor %}
-          </ul>
-        </li>
-      {% else %}
-        <li class="discreto">nenhum subdomínio cadastrado</li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p class="vazio">Nenhum domínio cadastrado. Comece pelo
-      <a href="{{ url_for('web.novo_ativo', tipo_item='dominio') }}">cadastro de domínio</a>.</p>
-  {% endfor %}
+  <div class="linha-campos" style="align-items:end">
+    <div class="campo">
+      <label for="filtro-arvore">Filtrar a árvore</label>
+      <input type="search" id="filtro-arvore" placeholder="nome ou código do ativo">
+    </div>
+    <div class="campo acoes">
+      <button type="button" class="secundario" data-expandir="1">Expandir tudo</button>
+      <button type="button" class="secundario" data-expandir="0">Recolher tudo</button>
+    </div>
+  </div>
+  <p class="discreto" id="resultado-filtro" hidden></p>
+
+  <ul class="arvore raiz" id="arvore">
+    {% for r in arvore %}{{ no(r) }}{% else %}
+      <li class="vazio">
+        {% if visao == 'negocio' %}
+          Nenhum domínio cadastrado. Comece pelo
+          <a href="{{ url_for('web.novo_ativo', tipo_item='dominio') }}">cadastro de domínio</a>.
+        {% else %}
+          Nenhum sistema cadastrado. Comece pelo
+          <a href="{{ url_for('web.novo_ativo', tipo_item='sistema') }}">cadastro de sistema</a>,
+          ou traga os ativos técnicos pela
+          <a href="{{ url_for('web.descobertas') }}">tela de descobertas</a>.
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
 </div>
+
+<script>
+(function () {
+  var campo = document.getElementById('filtro-arvore');
+  var arvore = document.getElementById('arvore');
+  var aviso = document.getElementById('resultado-filtro');
+  if (!campo || !arvore) { return; }
+
+  function abrirAncestrais(no) {
+    var pai = no.parentElement;
+    while (pai && pai !== arvore) {
+      if (pai.tagName === 'DETAILS') { pai.open = true; }
+      pai = pai.parentElement;
+    }
+  }
+
+  campo.addEventListener('input', function () {
+    var termo = campo.value.trim().toLowerCase();
+    var nos = arvore.querySelectorAll('.no');
+    if (!termo) {
+      Array.prototype.forEach.call(nos, function (n) { n.hidden = false; });
+      aviso.hidden = true;
+      return;
+    }
+    var achados = 0;
+    Array.prototype.forEach.call(nos, function (n) {
+      var proprio = (n.getAttribute('data-busca') || '').indexOf(termo) >= 0;
+      // um nó fica visível se ele casa ou se algum descendente casa
+      var descendente = Array.prototype.some.call(
+        n.querySelectorAll('.no'),
+        function (f) { return (f.getAttribute('data-busca') || '').indexOf(termo) >= 0; });
+      n.hidden = !(proprio || descendente);
+      if (proprio) { achados += 1; abrirAncestrais(n); }
+    });
+    aviso.hidden = false;
+    aviso.textContent = achados + ' ativo(s) com "' + campo.value.trim() + '" no nome ou no código.';
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-expandir]'), function (b) {
+    b.addEventListener('click', function () {
+      var abrir = b.getAttribute('data-expandir') === '1';
+      Array.prototype.forEach.call(arvore.querySelectorAll('details'),
+        function (d) { d.open = abrir; });
+    });
+  });
+})();
+</script>
 {% endblock %}

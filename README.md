@@ -41,7 +41,8 @@ Quatro experiências nucleares, como recomendado na proposta:
   pendências prioritárias com drill-through e evolução mensal.
 - **Catálogo de ativos** (`/catalogo`) — busca, filtros persistentes por sessão
   (retomados quando a tela é aberta sem parâmetros), chips de filtro ativo com
-  remoção individual, recorte "somente sem responsável", status, criticidade e score.
+  remoção individual, recortes "somente sem responsável" e por origem do cadastro,
+  ordenação por coluna e paginação com o total real.
 - **Wizard de cadastro** (`/ativo/novo`) — campos dinâmicos por tipo de ativo,
   contexto herdado do pai e checklist do que a política exige.
 - **Visão 360°** (`/ativo/<id>`) — abas de Resumo, Relações, Pessoas, Evidências e
@@ -53,8 +54,13 @@ Quatro experiências nucleares, como recomendado na proposta:
 - **Central de validações** (`/validacoes`) — fila priorizada por criticidade e SLA, com
   o diff da revisão em análise, evidências e responsáveis no painel de decisão,
   atribuição da análise e "ir para a próxima da fila" depois de decidir.
-- **Mapa DDD** (`/mapa`) — árvore Domínio → Subdomínio → Contexto → Capacidade com
-  cobertura de implementação.
+- **Mapas** (`/mapa`) — as duas hierarquias do modelo, colapsáveis e com busca dentro da
+  árvore: negócio (Domínio → Subdomínio → Contexto → Capacidade, com cobertura de
+  implementação) e tecnologia (`?visao=tecnica`: Sistema → Aplicação → API → Endpoint,
+  Base de dados → Objeto de dado).
+- **Descobertas** (`/descobertas`) — importa contrato OpenAPI e inventário Git pela
+  interface, com **prévia antes de gravar** e bandeja de triagem dos itens que a máquina
+  trouxe: aceitar tira da bandeja sem mexer no cadastro, descartar arquiva.
 
 Em todas as telas: busca global no cabeçalho (`/` ou `Ctrl+K` para focar, sugestões
 instantâneas por `/busca/sugestoes`), trilha hierárquica clicável nas telas de ativo e
@@ -63,7 +69,8 @@ destaque de menu por família de rota — abrir um ativo não apaga mais o "voc�
 ## Modelo de dados
 
 `ITEM_CATALOGO` é o núcleo comum: identidade, tipo, hierarquia, status de ciclo de vida,
-criticidade, vigência e revisão corrente. As particularidades de cada tipo ficam em
+criticidade, vigência, revisão corrente e `origem` (`manual` ou `automatica`, o que separa
+o cadastro humano do que veio de uma integração). As particularidades de cada tipo ficam em
 `atributos` (JSON) e são declaradas em `catalogo/tipos.py`, o que mantém a semântica das
 entidades da proposta (Domínio, Subdomínio, Bounded Context, Capacidade, Sistema,
 Aplicação, Repositório, API, Endpoint, Base de dados, Objeto de dado, Evento) sem
@@ -122,14 +129,21 @@ POST /api/v1/snapshots
 ## Descoberta automática
 
 `catalogo/integracoes.py` importa contratos OpenAPI (cria a API e seus endpoints) e
-inventários Git em JSON. Os itens descobertos nascem em rascunho com evidência de
-origem: a máquina traz o que é observável, a pessoa valida a semântica.
+inventários Git em JSON. Os itens descobertos nascem em rascunho com `origem = 'automatica'`
+e evidência de procedência: a máquina traz o que é observável, a pessoa valida a semântica.
+
+Cada importador tem um par — `plano_*` diz o que aconteceria sem escrever nada e
+`importar_*` executa. É o que sustenta a prévia da tela `/descobertas`.
 
 ```python
-from catalogo.integracoes import importar_openapi, importar_repositorios
-importar_openapi(con, "contratos/simulacao.json", id_aplicacao=13)
+from catalogo.integracoes import plano_openapi, importar_openapi, importar_repositorios
+plano_openapi(con, "contratos/simulacao.json", id_aplicacao=13)      # só simula
+importar_openapi(con, "contratos/simulacao.json", id_aplicacao=13)   # grava
 importar_repositorios(con, "inventario-git.json", id_aplicacao=13)
 ```
+
+Pela interface é o mesmo caminho: cole o JSON, gere a prévia, confirme — e triar a bandeja
+depois. Nada é publicado automaticamente.
 
 ## Testes
 
@@ -152,6 +166,11 @@ publicação (inclusive a garantia de que nenhum bloqueio do pré-check fica de 
 o diff resumido da revisão em análise, o loop de decisão do validador, atribuição da
 análise, a mesa pessoal, a migração do banco antigo e o registro de relações com mecanismo.
 
+`tests/test_escala.py` cobre a escala: prévia que não escreve, importação marcando a
+origem, bandeja de triagem (e a garantia de que ela não toca em cadastro humano), relações
+em lote sem duplicar as existentes, paginação com total real, ordenação por coluna, as duas
+árvores do mapa e o agrupamento da análise de impacto.
+
 ## Estrutura
 
 ```
@@ -173,8 +192,8 @@ tests/             regras de governança (test_governanca) e navegação (test_j
 
 ## O que ficou fora do MVP
 
-Grafo navegável interativo, RBAC por perfil, notificações, importação assistida em massa,
-integrações com CMDB/CI-CD/backlog e o modelo estrela completo para Power BI — todos
-previstos para as fases 4 e 5 do roadmap. As decisões abertas listadas na seção 12.1 da
+Grafo navegável interativo, RBAC por perfil, notificações, integrações com
+CMDB/CI-CD/backlog e o modelo estrela completo para Power BI — todos previstos para as
+fases 4 e 5 do roadmap. As decisões abertas listadas na seção 12.1 da
 proposta (fonte de identidade de pessoas, granularidade mínima, sistema de registro
 operacional) continuam valendo antes da expansão corporativa.

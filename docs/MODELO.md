@@ -29,7 +29,7 @@ núcleo.
 
 | Tabela | Papel |
 | --- | --- |
-| `item_catalogo` | Núcleo: identidade, tipo, hierarquia, status, criticidade, vigência, revisão corrente |
+| `item_catalogo` | Núcleo: identidade, tipo, hierarquia, status, criticidade, vigência, revisão corrente e `origem` (manual ou automatica) |
 | `squad`, `pessoa` | Organização; a fonte de identidade corporativa entra aqui na integração |
 | `responsabilidade` | Ownership por papel com vigência (N:N pessoa × item) |
 | `relacionamento_ativo` | Grafo tipado entre ativos, com criticidade, mecanismo e origem |

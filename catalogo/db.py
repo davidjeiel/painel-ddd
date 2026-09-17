@@ -33,6 +33,7 @@ def fechar_db(_exc=None) -> None:
 # EXISTS` não altera tabela existente, então bancos antigos precisam do ALTER.
 MIGRACOES = [
     ("validacao", "atribuido_a", "TEXT"),
+    ("item_catalogo", "origem", "TEXT NOT NULL DEFAULT 'manual'"),
 ]
 
 

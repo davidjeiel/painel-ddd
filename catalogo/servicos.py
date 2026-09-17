@@ -45,7 +45,7 @@ def gerar_codigo(con, tipo_item: str) -> str:
 def criar_item(con, *, tipo_item: str, nome: str, descricao: str = "",
                id_pai: int | None = None, id_squad: int | None = None,
                criticidade: str = "media", atributos: dict | None = None,
-               usuario: str = "sistema") -> int:
+               usuario: str = "sistema", origem: str = "manual") -> int:
     t = tipos.tipo(tipo_item)
     if criticidade not in tipos.CRITICIDADES:
         raise RegraDeNegocio(f"criticidade inválida: {criticidade}")
@@ -68,9 +68,10 @@ def criar_item(con, *, tipo_item: str, nome: str, descricao: str = "",
     codigo = gerar_codigo(con, tipo_item)
     cur = con.execute(
         "INSERT INTO item_catalogo (tipo_item, codigo, nome, descricao, id_pai,"
-        " id_squad, criticidade, atributos, criado_por) VALUES (?,?,?,?,?,?,?,?,?)",
+        " id_squad, criticidade, atributos, criado_por, origem)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?)",
         (tipo_item, codigo, nome.strip(), descricao.strip(), id_pai, id_squad,
-         criticidade, json.dumps(atributos or {}, ensure_ascii=False), usuario),
+         criticidade, json.dumps(atributos or {}, ensure_ascii=False), usuario, origem),
     )
     id_item = cur.lastrowid
     auditar(con, id_item, "criar", usuario, depois={"codigo": codigo, "nome": nome})
@@ -349,20 +350,25 @@ def alterar_status(con, id_item: int, novo: str, usuario: str = "sistema") -> No
 
 
 # ------------------------------------------------------------------ consultas
-def buscar(con, termo: str = "", tipo_item: str = "", status: str = "",
-           id_squad: str | int = "", criticidade: str = "", sem_owner: str = "",
-           limite: int = 200) -> list[dict]:
-    sql = [
-        "SELECT i.*, s.nome AS squad,",
-        " (SELECT q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item",
-        "   ORDER BY q.id_qualidade DESC LIMIT 1) AS score,",
-        " p.nome AS pai_nome",
-        "FROM item_catalogo i",
-        "LEFT JOIN squad s ON s.id_squad = i.id_squad",
-        "LEFT JOIN item_catalogo p ON p.id_item = i.id_pai",
-        "WHERE 1 = 1",
-    ]
-    params: list = []
+# Colunas por que o catálogo pode ser ordenado. Lista fechada: o parâmetro vem
+# da URL e vai direto para o ORDER BY.
+ORDENACOES = {
+    "nome": "i.nome",
+    "tipo": "i.tipo_item, i.nome",
+    "status": "i.status_ciclo_vida, i.nome",
+    "criticidade": ("CASE i.criticidade WHEN 'critica' THEN 0 WHEN 'alta' THEN 1"
+                    " WHEN 'media' THEN 2 ELSE 3 END, i.nome"),
+    "score": "score",
+    "atualizado": "i.atualizado_em",
+}
+ORDEM_PADRAO = "tipo"
+
+
+def _filtro_busca(termo: str = "", tipo_item: str = "", status: str = "",
+                  id_squad: str | int = "", criticidade: str = "",
+                  sem_owner: str = "", origem: str = "") -> tuple[str, list]:
+    """Monta o WHERE compartilhado pela listagem, pela contagem e pela API."""
+    sql, params = ["WHERE 1 = 1"], []
     if termo:
         sql.append("AND (i.nome LIKE ? OR i.codigo LIKE ? OR i.descricao LIKE ?)")
         alvo = f"%{termo}%"
@@ -379,13 +385,61 @@ def buscar(con, termo: str = "", tipo_item: str = "", status: str = "",
     if criticidade:
         sql.append("AND i.criticidade = ?")
         params.append(criticidade)
+    if origem:
+        sql.append("AND i.origem = ?")
+        params.append(origem)
     if sem_owner:
         # recorte do KPI "Sem responsável" do painel executivo
         sql.append("AND NOT EXISTS (SELECT 1 FROM responsabilidade r "
                    "WHERE r.id_item = i.id_item AND r.fim_vigencia IS NULL)")
-    sql.append("ORDER BY i.tipo_item, i.nome LIMIT ?")
-    params.append(limite)
-    return [dict(l) for l in con.execute(" ".join(sql), params)]
+    return " ".join(sql), params
+
+
+_SELECT_BUSCA = (
+    "SELECT i.*, s.nome AS squad,"
+    " (SELECT q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item"
+    "   ORDER BY q.id_qualidade DESC LIMIT 1) AS score,"
+    " p.nome AS pai_nome"
+    " FROM item_catalogo i"
+    " LEFT JOIN squad s ON s.id_squad = i.id_squad"
+    " LEFT JOIN item_catalogo p ON p.id_item = i.id_pai "
+)
+
+
+def buscar(con, limite: int = 200, ordenar: str = ORDEM_PADRAO,
+           descendente: bool = False, **filtros) -> list[dict]:
+    onde, params = _filtro_busca(**filtros)
+    ordem = ORDENACOES.get(ordenar, ORDENACOES[ORDEM_PADRAO])
+    direcao = " DESC" if descendente else ""
+    return [dict(l) for l in con.execute(
+        f"{_SELECT_BUSCA} {onde} ORDER BY {ordem}{direcao} LIMIT ?",
+        [*params, limite])]
+
+
+def contar(con, **filtros) -> int:
+    onde, params = _filtro_busca(**filtros)
+    return con.execute(
+        f"SELECT COUNT(*) FROM item_catalogo i {onde}", params).fetchone()[0]
+
+
+def buscar_pagina(con, pagina: int = 1, por_pagina: int = 50,
+                  ordenar: str = ORDEM_PADRAO, descendente: bool = False,
+                  **filtros) -> dict:
+    """Uma página do catálogo, com o total real — o rodapé parava de dizer a
+    verdade a partir do teto fixo de 200 linhas."""
+    total = contar(con, **filtros)
+    paginas = max(1, -(-total // por_pagina))
+    pagina = min(max(1, pagina), paginas)
+    onde, params = _filtro_busca(**filtros)
+    ordem = ORDENACOES.get(ordenar, ORDENACOES[ORDEM_PADRAO])
+    direcao = " DESC" if descendente else ""
+    itens = [dict(l) for l in con.execute(
+        f"{_SELECT_BUSCA} {onde} ORDER BY {ordem}{direcao} LIMIT ? OFFSET ?",
+        [*params, por_pagina, (pagina - 1) * por_pagina])]
+    return {"itens": itens, "total": total, "pagina": pagina, "paginas": paginas,
+            "por_pagina": por_pagina,
+            "primeiro": 0 if not total else (pagina - 1) * por_pagina + 1,
+            "ultimo": min(pagina * por_pagina, total)}
 
 
 def trilha(con, id_item: int) -> list[dict]:
@@ -664,6 +718,106 @@ def diff_da_revisao(con, id_item: int, id_revisao: int | None) -> dict:
         }
     return {"numero": numero, "anterior": numero - 1, "primeira": False,
             "diff": resumo}
+
+
+def arvore(con, tipo_raiz: str) -> list[dict]:
+    """Monta a hierarquia inteira a partir de um tipo de raiz, numa consulta só.
+
+    Serve as duas árvores do catálogo — Domínio → Capacidade e
+    Sistema → Endpoint — porque a hierarquia é sempre ``id_pai``.
+    """
+    linhas = con.execute(
+        "SELECT i.id_item, i.id_pai, i.nome, i.codigo, i.tipo_item,"
+        " i.status_ciclo_vida,"
+        " (SELECT COUNT(*) FROM relacionamento_ativo r WHERE r.id_destino = i.id_item"
+        "   AND r.tipo_relacao = 'implementa' AND r.fim_vigencia IS NULL)"
+        "   AS implementacoes"
+        " FROM item_catalogo i WHERE i.status_ciclo_vida <> 'arquivado'"
+        " ORDER BY i.nome").fetchall()
+    nos = {l["id_item"]: {**dict(l), "filhos": []} for l in linhas}
+    for no in nos.values():
+        pai = nos.get(no["id_pai"])
+        if pai is not None:
+            pai["filhos"].append(no)
+    return [n for n in nos.values() if n["tipo_item"] == tipo_raiz]
+
+
+def analise_impacto(con, id_item: int) -> dict:
+    """Quem depende deste ativo, agrupado — não só a contagem do cartão final."""
+    consumidores = governanca.impacto_descontinuacao(con, id_item)
+    por_criticidade: dict[str, int] = {}
+    por_tipo: dict[str, int] = {}
+    for c in consumidores:
+        por_criticidade[c["criticidade"]] = por_criticidade.get(c["criticidade"], 0) + 1
+        por_tipo[c["tipo_item"]] = por_tipo.get(c["tipo_item"], 0) + 1
+    criticos = [c for c in consumidores if c["criticidade"] in ("alta", "critica")]
+    return {"consumidores": consumidores, "total": len(consumidores),
+            "criticos": criticos, "por_criticidade": por_criticidade,
+            "por_tipo": por_tipo}
+
+
+# ------------------------------------------------------- bandeja de descobertas
+def descobertas(con, limite: int = 200) -> list[dict]:
+    """Itens que a máquina trouxe e ninguém validou ainda."""
+    return buscar(con, origem="automatica", status="rascunho",
+                  ordenar="atualizado", descendente=True, limite=limite)
+
+
+def triar(con, ids: list[int], acao: str, usuario: str = "sistema") -> dict:
+    """Aceita ou descarta itens descobertos, em lote.
+
+    Aceitar não altera o cadastro: apenas marca que uma pessoa olhou, tirando o
+    item da bandeja. Descartar arquiva, preservando a trilha.
+    """
+    if acao not in ("aceitar", "descartar"):
+        raise RegraDeNegocio(f"ação de triagem inválida: {acao}")
+    tratados = 0
+    for id_item in ids:
+        linha = con.execute(
+            "SELECT status_ciclo_vida, origem FROM item_catalogo WHERE id_item = ?",
+            (id_item,)).fetchone()
+        if linha is None or linha["origem"] != "automatica":
+            continue
+        if acao == "aceitar":
+            con.execute("UPDATE item_catalogo SET origem = 'manual',"
+                        " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
+        else:
+            if linha["status_ciclo_vida"] not in ("rascunho", "em_validacao"):
+                continue
+            con.execute("UPDATE item_catalogo SET status_ciclo_vida = 'arquivado',"
+                        " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
+        auditar(con, id_item, f"triagem_{acao}", usuario, origem="descobertas")
+        tratados += 1
+    con.commit()
+    return {"acao": acao, "tratados": tratados}
+
+
+def relacionar_em_lote(con, id_origem: int, destinos: list[int], tipo_relacao: str,
+                       criticidade: str = "media", mecanismo: str | None = None,
+                       usuario: str = "sistema") -> dict:
+    """Registra várias relações do mesmo tipo de uma vez.
+
+    Mapear as dependências de uma aplicação custava um POST e uma recarga por
+    relação; aqui o gesto é um só.
+    """
+    criadas, ignoradas, erros = 0, 0, []
+    for destino in destinos:
+        if destino == id_origem:
+            ignoradas += 1
+            continue
+        ja_existe = con.execute(
+            "SELECT 1 FROM relacionamento_ativo WHERE id_origem = ? AND id_destino = ?"
+            " AND tipo_relacao = ?", (id_origem, destino, tipo_relacao)).fetchone()
+        if ja_existe:
+            ignoradas += 1
+            continue
+        try:
+            relacionar(con, id_origem, destino, tipo_relacao, criticidade,
+                       mecanismo, usuario=usuario)
+            criadas += 1
+        except RegraDeNegocio as erro:
+            erros.append(str(erro))
+    return {"criadas": criadas, "ignoradas": ignoradas, "erros": erros}
 
 
 def minha_mesa(con, usuario: str) -> dict:

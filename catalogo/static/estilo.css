@@ -312,6 +312,47 @@ ul.evidencias li { padding: 2px 0; }
 .arvore { list-style: none; padding-left: 18px; margin: 0; border-left: 1px solid var(--linha); }
 .arvore > li { padding: 5px 0; }
 .arvore .no-raiz { font-weight: 600; }
+.arvore.raiz { border-left: none; padding-left: 0; }
+.arvore summary, .arvore .folha {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  padding: 3px 0; font-size: 14px;
+}
+.arvore summary { cursor: pointer; list-style: none; }
+.arvore summary::-webkit-details-marker { display: none; }
+/* seta própria: summary em flex perde o marcador nativo */
+.arvore summary::before {
+  content: "▸"; color: var(--tinta-suave); font-size: 11px;
+  width: 11px; flex: 0 0 11px;
+}
+.arvore details[open] > summary::before { content: "▾"; }
+.arvore summary .rotulo { font-weight: 600; }
+.arvore .folha { padding-left: 15px; }
+.arvore .abrir { font-size: 12px; opacity: .5; }
+.arvore summary:hover .abrir, .arvore .folha:hover .abrir,
+.arvore .abrir:focus { opacity: 1; }
+.arvore details > .arvore { margin-top: 2px; }
+
+/* ------------------------------------------- ordenação e paginação da lista */
+th.ordenada { color: var(--marca); }
+th a { color: inherit; display: inline-flex; gap: 4px; align-items: center; }
+th .seta { font-size: 9px; }
+.leitor {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+.paginacao {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 14px; flex-wrap: wrap; margin-top: 12px;
+}
+.paginacao p { margin: 0; }
+.paginas { display: flex; gap: 14px; align-items: center; font-size: 13.5px; }
+
+/* ------------------------------------------------ descobertas e lote */
+.linha-nova td { background: #f4fbf7; }
+.ja-existe td { color: var(--tinta-suave); }
+details.impacto > summary { cursor: pointer; font-size: 13px; color: var(--marca); }
+details.impacto ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+details.impacto li { padding: 2px 0; }
 
 .discreto { color: var(--tinta-suave); font-size: 13px; }
 .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; }

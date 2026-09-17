@@ -57,6 +57,14 @@
         <option value="1" {{ 'selected' if filtros.sem_owner }}>Somente sem responsável</option>
       </select>
     </div>
+    <div class="campo">
+      <label for="origem">Origem do cadastro</label>
+      <select id="origem" name="origem">
+        <option value="">Qualquer</option>
+        <option value="manual" {{ 'selected' if filtros.origem == 'manual' }}>Cadastro manual</option>
+        <option value="automatica" {{ 'selected' if filtros.origem == 'automatica' }}>Descoberta automática</option>
+      </select>
+    </div>
     <div class="campo acoes">
       <button type="submit">Aplicar filtros</button>
       <a class="botao secundario" href="{{ url_for('web.novo_ativo') }}">Novo ativo</a>
@@ -76,11 +84,28 @@
   {% endif %}
 </div>
 
+{# Cada cabeçalho é um link que ordena; clicar de novo inverte o sentido. #}
+{% macro coluna(chave, rotulo) %}
+  {% set atual = ordenar == chave %}
+  <th scope="col" class="{{ 'ordenada' if atual }}">
+    <a href="{{ url_for('web.catalogo', ordenar=chave,
+                        desc='1' if (atual and not descendente) else None,
+                        pagina=None, **filtros_ativos) }}">{{ rotulo }}<span
+       class="seta" aria-hidden="true">{{ '▲' if atual and not descendente else ('▼' if atual else '') }}</span>
+      {%- if atual %}<span class="leitor">ordenado {{ 'decrescente' if descendente else 'crescente' }}</span>{% endif %}</a>
+  </th>
+{% endmacro %}
+
+{% set filtros_ativos = {} %}
+{% for chave, valor in filtros.items() if valor %}{% set _ = filtros_ativos.update({chave: valor}) %}{% endfor %}
+
 <div class="cartao">
   <table>
     <thead>
-      <tr><th>Ativo</th><th>Tipo</th><th>Contexto/pai</th><th>Squad</th>
-          <th>Status</th><th>Criticidade</th><th>Qualidade</th></tr>
+      <tr>{{ coluna('nome', 'Ativo') }}{{ coluna('tipo', 'Tipo') }}
+          <th scope="col">Contexto/pai</th><th scope="col">Squad</th>
+          {{ coluna('status', 'Status') }}{{ coluna('criticidade', 'Criticidade') }}
+          {{ coluna('score', 'Qualidade') }}</tr>
     </thead>
     <tbody>
     {% for i in itens %}
@@ -106,6 +131,29 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="discreto">{{ itens|length }} ativo(s) listado(s).</p>
+
+  <div class="paginacao">
+    <p class="discreto">
+      {% if pagina.total %}
+        Mostrando {{ pagina.primeiro }}–{{ pagina.ultimo }} de
+        <strong>{{ pagina.total }}</strong> ativo(s).
+      {% else %}
+        Nenhum ativo neste recorte.
+      {% endif %}
+    </p>
+    {% if pagina.paginas > 1 %}
+      <nav class="paginas" aria-label="Paginação">
+        {% if pagina.pagina > 1 %}
+          <a href="{{ url_for('web.catalogo', pagina=pagina.pagina - 1, ordenar=ordenar,
+                              desc='1' if descendente else None, **filtros_ativos) }}">‹ Anterior</a>
+        {% endif %}
+        <span class="discreto">Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
+        {% if pagina.pagina < pagina.paginas %}
+          <a href="{{ url_for('web.catalogo', pagina=pagina.pagina + 1, ordenar=ordenar,
+                              desc='1' if descendente else None, **filtros_ativos) }}">Próxima ›</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

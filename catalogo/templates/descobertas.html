@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block titulo %}Descobertas{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Descobertas</h1>
+  <p>A máquina traz o que é observável — contratos e repositórios — e a pessoa valida a
+     semântica. Nada entra publicado: tudo nasce como rascunho na bandeja.</p>
+</div>
+
+<div class="abas">
+  {% for chave, f in fontes.items() %}
+    <a href="{{ url_for('web.descobertas', fonte=chave) }}"
+       class="{{ 'ativo' if fonte == chave }}">{{ f.rotulo }}</a>
+  {% endfor %}
+</div>
+
+<div class="grade duas">
+  <div class="cartao">
+    <h2>Importar · {{ fontes[fonte].rotulo }}</h2>
+    <p class="discreto">{{ fontes[fonte].ajuda }}</p>
+    <form method="post" action="{{ url_for('web.descobertas') }}">
+      <input type="hidden" name="fonte" value="{{ fonte }}">
+      <div class="campo">
+        <label for="id_pai">Aplicação onde os ativos entram</label>
+        <select id="id_pai" name="id_pai">
+          <option value="">Sem vínculo por enquanto</option>
+          {% for a in aplicacoes %}
+            <option value="{{ a.id_item }}" {{ 'selected' if id_pai == a.id_item }}>{{ a.nome }} ({{ a.codigo }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="conteudo">Conteúdo JSON</label>
+        <textarea id="conteudo" name="conteudo" rows="10" class="mono"
+                  placeholder="cole aqui o contrato ou o inventário">{{ conteudo }}</textarea>
+      </div>
+      <div class="acoes">
+        <button type="submit" name="acao" value="previa" class="secundario">Gerar prévia</button>
+        {% if plano %}
+          <button type="submit" name="acao" value="importar">Confirmar importação</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="cartao">
+    <h2>Prévia</h2>
+    {% if plano %}
+      <p><strong>{{ plano.titulo }}</strong>
+        {% if plano.versao %}<span class="discreto">versão {{ plano.versao }}</span>{% endif %}</p>
+      <p class="discreto">
+        <span class="etiqueta publicado">{{ plano.criar }} a criar</span>
+        <span class="etiqueta">{{ plano.manter }} já existem</span>
+      </p>
+      <div style="max-height:420px;overflow-y:auto">
+        <table>
+          <thead><tr><th scope="col">Ação</th><th scope="col">Tipo</th>
+                     <th scope="col">Ativo</th></tr></thead>
+          <tbody>
+          {% for a in plano.acoes %}
+            <tr class="{{ 'linha-nova' if a.acao == 'criar' }}">
+              <td><span class="etiqueta {{ 'publicado' if a.acao == 'criar' }}">{{ a.acao }}</span></td>
+              <td>{{ a.tipo }}</td>
+              <td>{{ a.nome }}
+                {% if a.detalhe and a.detalhe != '—' %}
+                  <div class="discreto">{{ a.detalhe }}</div>
+                {% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="discreto">Confirme no formulário ao lado para gravar. Nada foi escrito ainda.</p>
+    {% else %}
+      <p class="vazio">Cole o JSON e gere a prévia: você vê o que será criado antes de
+         qualquer escrita no catálogo.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="cartao">
+  <h2>Bandeja de triagem — {{ bandeja|length }} item(ns) descoberto(s)</h2>
+  <p class="discreto">Rascunhos que vieram de uma integração e ninguém revisou. Aceitar
+     tira da bandeja sem mudar o cadastro; descartar arquiva, preservando a trilha.</p>
+  {% if bandeja %}
+    <form method="post" action="{{ url_for('web.triagem') }}">
+      <table>
+        <thead>
+          <tr><th scope="col"><input type="checkbox" id="marcar-todos"
+                                     aria-label="Marcar todos"></th>
+              <th scope="col">Ativo</th><th scope="col">Tipo</th>
+              <th scope="col">Contexto/pai</th><th scope="col">Criado por</th>
+              <th scope="col">Quando</th></tr>
+        </thead>
+        <tbody>
+        {% for i in bandeja %}
+          <tr>
+            <td><input type="checkbox" name="id_item" value="{{ i.id_item }}"
+                       aria-label="Selecionar {{ i.nome }}"></td>
+            <td><a href="{{ url_for('web.detalhe', id_item=i.id_item) }}">{{ i.nome }}</a>
+                <div class="mono discreto">{{ i.codigo }}</div></td>
+            <td>{{ i.tipo_item|rotulo_tipo }}</td>
+            <td>{{ i.pai_nome or '—' }}</td>
+            <td class="discreto">{{ i.criado_por }}</td>
+            <td class="discreto">{{ i.atualizado_em }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="acoes" style="margin-top:14px">
+        <button type="submit" name="acao" value="aceitar" class="secundario">Aceitar selecionados</button>
+        <button type="submit" name="acao" value="descartar" class="perigo">Descartar selecionados</button>
+      </div>
+    </form>
+  {% else %}
+    <p class="vazio">Bandeja vazia. Tudo o que a descoberta trouxe já foi triado.</p>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var todos = document.getElementById('marcar-todos');
+  if (!todos) { return; }
+  todos.addEventListener('change', function () {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('input[name="id_item"]'),
+      function (c) { c.checked = todos.checked; });
+  });
+})();
+</script>
+{% endblock %}

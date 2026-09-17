@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block titulo %}Relações em lote · {{ item.nome }}{% endblock %}
+
+{% block conteudo %}
+{% set atual = item.nome ~ ' · relações em lote' %}
+{% include "_trilha.html" with context %}
+<div class="cabecalho">
+  <h1>Relações em lote</h1>
+  <p>Marque tudo o que <strong>{{ item.nome }}</strong> {{ relacoes[tipo_relacao] }} e
+     salve de uma vez. As relações que já existem aparecem marcadas e não são duplicadas.</p>
+</div>
+
+<div class="cartao">
+  <form method="get" class="linha-campos filtros" style="align-items:end">
+    <div class="campo">
+      <label for="tipo_relacao">Tipo de relação</label>
+      <select id="tipo_relacao" name="tipo_relacao" onchange="this.form.submit()">
+        {% for chave, rotulo in relacoes.items() %}
+          <option value="{{ chave }}" {{ 'selected' if chave == tipo_relacao }}>{{ rotulo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="todos">Tipos oferecidos</label>
+      <select id="todos" name="todos" onchange="this.form.submit()">
+        <option value="">Só os compatíveis</option>
+        <option value="1" {{ 'selected' if todos }}>Todos os tipos</option>
+      </select>
+    </div>
+    <div class="campo acoes">
+      <noscript><button type="submit" class="secundario">Aplicar</button></noscript>
+      <a class="botao secundario" href="{{ url_for('web.detalhe', id_item=item.id_item, aba='relacoes') }}">Voltar ao ativo</a>
+    </div>
+  </form>
+  {% if sugeridos and not todos %}
+    <p class="discreto">Mostrando
+      {% for s in sugeridos %}{{ s|rotulo_tipo }}{{ ', ' if not loop.last }}{% endfor %} —
+      os tipos que costumam fazer sentido nesta relação.</p>
+  {% endif %}
+</div>
+
+<form method="post">
+  <input type="hidden" name="tipo_relacao" value="{{ tipo_relacao }}">
+  <div class="cartao">
+    <div class="linha-campos" style="align-items:end">
+      <div class="campo">
+        <label for="mecanismo">Mecanismo (aplicado a todas)</label>
+        <select id="mecanismo" name="mecanismo">
+          <option value="">Não informado</option>
+          {% for chave, rotulo in mecanismos.items() %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="criticidade">Criticidade (aplicada a todas)</label>
+        <select id="criticidade" name="criticidade">
+          {% for c in CRITICIDADES %}
+            <option value="{{ c }}" {{ 'selected' if c == 'media' }}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="filtro-lote">Filtrar a lista</label>
+        <input type="search" id="filtro-lote" placeholder="nome ou código">
+      </div>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <table>
+      <thead>
+        <tr><th scope="col"><input type="checkbox" id="marcar-todos" aria-label="Marcar todos"></th>
+            <th scope="col">Ativo</th><th scope="col">Tipo</th>
+            <th scope="col">Contexto/pai</th><th scope="col">Status</th></tr>
+      </thead>
+      <tbody id="lista-lote">
+      {% for c in candidatos %}
+        <tr data-busca="{{ (c.nome ~ ' ' ~ c.codigo)|lower }}"
+            class="{{ 'ja-existe' if c.ja_existe }}">
+          <td><input type="checkbox" name="destino" value="{{ c.id_item }}"
+                     {{ 'checked disabled' if c.ja_existe }}
+                     aria-label="Relacionar com {{ c.nome }}"></td>
+          <td><a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
+              <div class="mono discreto">{{ c.codigo }}</div></td>
+          <td>{{ c.tipo_item|rotulo_tipo }}</td>
+          <td>{{ c.pai_nome or '—' }}</td>
+          <td><span class="etiqueta {{ c.status_ciclo_vida }}">{{ c.status_ciclo_vida|rotulo_status }}</span>
+              {% if c.ja_existe %}<span class="discreto">já relacionado</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="vazio">Nenhum ativo compatível com esta relação.
+          Escolha "todos os tipos" para ver o catálogo inteiro.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="acoes" style="margin-top:14px">
+      <button type="submit">Registrar relações marcadas</button>
+      <span class="discreto" id="contagem-lote"></span>
+    </div>
+  </div>
+</form>
+
+<script>
+(function () {
+  var lista = document.getElementById('lista-lote');
+  var todos = document.getElementById('marcar-todos');
+  var filtro = document.getElementById('filtro-lote');
+  var contagem = document.getElementById('contagem-lote');
+  if (!lista) { return; }
+
+  function caixas() {
+    return Array.prototype.filter.call(
+      lista.querySelectorAll('input[name="destino"]:not([disabled])'),
+      function (c) { return !c.closest('tr').hidden; });
+  }
+  function atualizar() {
+    var n = caixas().filter(function (c) { return c.checked; }).length;
+    contagem.textContent = n ? n + ' ativo(s) marcado(s)' : '';
+  }
+
+  if (todos) {
+    todos.addEventListener('change', function () {
+      caixas().forEach(function (c) { c.checked = todos.checked; });
+      atualizar();
+    });
+  }
+  lista.addEventListener('change', atualizar);
+
+  if (filtro) {
+    filtro.addEventListener('input', function () {
+      var termo = filtro.value.trim().toLowerCase();
+      Array.prototype.forEach.call(lista.querySelectorAll('tr[data-busca]'), function (tr) {
+        tr.hidden = !!termo && (tr.getAttribute('data-busca') || '').indexOf(termo) < 0;
+      });
+      atualizar();
+    });
+  }
+})();
+</script>
+{% endblock %}

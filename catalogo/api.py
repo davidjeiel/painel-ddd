@@ -27,6 +27,7 @@ def listar_itens():
         tipo_item=request.args.get("tipo_item", ""),
         status=request.args.get("status", ""),
         criticidade=request.args.get("criticidade", ""),
+        origem=request.args.get("origem", ""),
         limite=int(request.args.get("limite", 200)),
     )
     return jsonify({"total": len(itens), "itens": itens})

@@ -6,7 +6,7 @@ import json
 from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
                    request, session, url_for)
 
-from . import governanca, servicos, tipos
+from . import governanca, integracoes, servicos, tipos
 from .db import get_db
 
 bp = Blueprint("web", __name__)
@@ -25,8 +25,11 @@ SECOES = {
     "web.revisar": "catalogo",
     "web.descontinuar": "catalogo",
     "web.comparar": "catalogo",
+    "web.relacoes_lote": "catalogo",
     "web.mapa": "mapa",
     "web.novo_ativo": "novo",
+    "web.descobertas": "descobertas",
+    "web.triagem": "descobertas",
     "web.meu_trabalho": "mesa",
     "web.validacoes": "validacoes",
     "web.decidir": "validacoes",
@@ -47,7 +50,9 @@ FILTROS_CATALOGO = {
     "id_squad": "Squad",
     "criticidade": "Criticidade",
     "sem_owner": "Sem responsável",
+    "origem": "Origem do cadastro",
 }
+POR_PAGINA = 50
 
 
 def usuario_atual() -> str:
@@ -153,6 +158,8 @@ def _chips(filtros: dict, squads: list[dict]) -> list[dict]:
             legivel = nomes_squad.get(str(valor), valor)
         elif chave == "sem_owner":
             legivel = "sim"
+        elif chave == "origem":
+            legivel = "descoberta automática" if valor == "automatica" else "manual"
         else:
             legivel = valor
         restante = {k: v for k, v in filtros.items() if v and k != chave}
@@ -168,60 +175,91 @@ def catalogo():
     con = get_db()
     filtros = _filtros_do_pedido()
     session["filtros_catalogo"] = filtros  # filtros persistentes
-    itens = servicos.buscar(con, **filtros)
+    ordenar = request.args.get("ordenar", servicos.ORDEM_PADRAO)
+    if ordenar not in servicos.ORDENACOES:
+        ordenar = servicos.ORDEM_PADRAO
+    descendente = request.args.get("desc") == "1"
+    pagina = servicos.buscar_pagina(
+        con, pagina=request.args.get("pagina", 1, type=int), por_pagina=POR_PAGINA,
+        ordenar=ordenar, descendente=descendente, **filtros)
     squads = [dict(l) for l in con.execute("SELECT * FROM squad ORDER BY nome")]
-    return render_template("catalogo.html", itens=itens, filtros=filtros,
-                           squads=squads, chips=_chips(filtros, squads))
+    return render_template("catalogo.html", itens=pagina["itens"], pagina=pagina,
+                           filtros=filtros, squads=squads,
+                           ordenar=ordenar, descendente=descendente,
+                           chips=_chips(filtros, squads))
 
 
 @bp.route("/mapa")
 def mapa():
     con = get_db()
-    # árvore inteira (domínio→subdomínio→contexto→capacidade) em uma única
-    # ida ao banco via LEFT JOINs, em vez de uma query por nível/linha (N+1)
-    linhas = con.execute(
-        "SELECT d.id_item AS d_id, d.nome AS d_nome, d.status_ciclo_vida AS d_status,"
-        " s.id_item AS s_id, s.nome AS s_nome,"
-        " c.id_item AS c_id, c.nome AS c_nome,"
-        " cap.id_item AS cap_id, cap.nome AS cap_nome,"
-        " (SELECT COUNT(*) FROM relacionamento_ativo r WHERE r.id_destino = cap.id_item"
-        "   AND r.tipo_relacao = 'implementa' AND r.fim_vigencia IS NULL) AS cap_implementacoes"
-        " FROM item_catalogo d"
-        " LEFT JOIN item_catalogo s ON s.id_pai = d.id_item"
-        " LEFT JOIN item_catalogo c ON c.id_pai = s.id_item"
-        " LEFT JOIN item_catalogo cap ON cap.id_pai = c.id_item"
-        " WHERE d.tipo_item = 'dominio'"
-        " ORDER BY d.nome, s.nome, c.nome, cap.nome"
-    ).fetchall()
+    visao = request.args.get("visao", "negocio")
+    if visao not in ("negocio", "tecnica"):
+        visao = "negocio"
+    return render_template(
+        "mapa.html", visao=visao,
+        arvore=servicos.arvore(con, "dominio" if visao == "negocio" else "sistema"),
+        totais={"negocio": con.execute(
+                    "SELECT COUNT(*) FROM item_catalogo WHERE tipo_item = 'dominio'"
+                    " AND status_ciclo_vida <> 'arquivado'").fetchone()[0],
+                "tecnica": con.execute(
+                    "SELECT COUNT(*) FROM item_catalogo WHERE tipo_item = 'sistema'"
+                    " AND status_ciclo_vida <> 'arquivado'").fetchone()[0]})
 
-    dominios: dict[int, dict] = {}
-    subs: dict[int, dict] = {}
-    contextos: dict[int, dict] = {}
-    for l in linhas:
-        dominio = dominios.get(l["d_id"])
-        if dominio is None:
-            dominio = {"id_item": l["d_id"], "nome": l["d_nome"],
-                      "status_ciclo_vida": l["d_status"], "subdominios": []}
-            dominios[l["d_id"]] = dominio
-        if l["s_id"] is None:
-            continue
-        sub = subs.get(l["s_id"])
-        if sub is None:
-            sub = {"id_item": l["s_id"], "nome": l["s_nome"], "contextos": []}
-            subs[l["s_id"]] = sub
-            dominio["subdominios"].append(sub)
-        if l["c_id"] is None:
-            continue
-        ctx = contextos.get(l["c_id"])
-        if ctx is None:
-            ctx = {"id_item": l["c_id"], "nome": l["c_nome"], "capacidades": []}
-            contextos[l["c_id"]] = ctx
-            sub["contextos"].append(ctx)
-        if l["cap_id"] is None:
-            continue
-        ctx["capacidades"].append({"id_item": l["cap_id"], "nome": l["cap_nome"],
-                                   "implementacoes": l["cap_implementacoes"]})
-    return render_template("mapa.html", arvore=list(dominios.values()))
+
+# ------------------------------------------------------------------ descobertas
+@bp.route("/descobertas", methods=["GET", "POST"])
+def descobertas():
+    con = get_db()
+    fonte = request.values.get("fonte", "openapi")
+    if fonte not in integracoes.FONTES:
+        fonte = "openapi"
+    conteudo = request.form.get("conteudo", "")
+    id_pai = request.form.get("id_pai", type=int)
+    plano = None
+
+    if request.method == "POST" and conteudo.strip():
+        acao = request.form.get("acao", "previa")
+        try:
+            if acao == "importar":
+                resultado = integracoes.FONTES[fonte]["importar"](
+                    con, id_aplicacao=id_pai, usuario=usuario_atual(),
+                    conteudo=conteudo)
+                flash(f"Importação concluída: {resultado}. Os itens entraram na "
+                      "bandeja abaixo como rascunho.", "ok")
+                return redirect(url_for("web.descobertas", fonte=fonte))
+            plano = integracoes.FONTES[fonte]["plano"](
+                con, id_aplicacao=id_pai, conteudo=conteudo)
+        except (ValueError, KeyError, TypeError) as erro:
+            flash(f"Não consegui ler esse conteúdo: {erro}", "erro")
+        except servicos.RegraDeNegocio as erro:
+            flash(str(erro), "erro")
+    elif request.method == "POST":
+        flash("Cole o conteúdo JSON antes de gerar a prévia.", "erro")
+
+    aplicacoes = [dict(l) for l in con.execute(
+        "SELECT id_item, codigo, nome FROM item_catalogo WHERE tipo_item = 'aplicacao'"
+        " AND status_ciclo_vida NOT IN ('descontinuado','arquivado') ORDER BY nome")]
+    return render_template("descobertas.html", fontes=integracoes.FONTES, fonte=fonte,
+                           plano=plano, conteudo=conteudo, id_pai=id_pai,
+                           aplicacoes=aplicacoes,
+                           bandeja=servicos.descobertas(con))
+
+
+@bp.route("/descobertas/triagem", methods=["POST"])
+def triagem():
+    ids = [int(i) for i in request.form.getlist("id_item") if i.isdigit()]
+    if not ids:
+        flash("Escolha ao menos um item da bandeja.", "erro")
+        return redirect(url_for("web.descobertas"))
+    try:
+        resultado = servicos.triar(get_db(), ids, request.form.get("acao", ""),
+                                   usuario_atual())
+    except servicos.RegraDeNegocio as erro:
+        flash(str(erro), "erro")
+        return redirect(url_for("web.descobertas"))
+    verbo = "aceito(s)" if resultado["acao"] == "aceitar" else "descartado(s)"
+    flash(f"{resultado['tratados']} item(ns) {verbo}.", "ok")
+    return redirect(url_for("web.descobertas"))
 
 
 # ---------------------------------------------------------------------- wizard
@@ -290,6 +328,7 @@ def detalhe(id_item: int):
                            mecanismos=tipos.MECANISMOS,
                            trilha=servicos.trilha(con, id_item),
                            abas=ABAS_ATIVO, aba=aba,
+                           analise=servicos.analise_impacto(con, id_item),
                            caminho=governanca.caminho_publicacao(con, id_item, checagem),
                            precheck=checagem)
 
@@ -389,6 +428,58 @@ def descontinuar(id_item: int):
     else:
         flash("Ativo descontinuado e relações encerradas.", "ok")
     return redirect(url_for("web.detalhe", id_item=id_item))
+
+
+@bp.route("/ativo/<int:id_item>/relacoes-lote", methods=["GET", "POST"])
+def relacoes_lote(id_item: int):
+    """Mapear as dependências de uma aplicação inteira num gesto só."""
+    con = get_db()
+    item = con.execute("SELECT id_item, codigo, nome, tipo_item FROM item_catalogo "
+                       "WHERE id_item = ?", (id_item,)).fetchone()
+    if item is None:
+        abort(404)
+    tipo_relacao = request.values.get("tipo_relacao", "implementa")
+    if tipo_relacao not in tipos.RELACOES:
+        tipo_relacao = "implementa"
+
+    if request.method == "POST":
+        destinos = [int(d) for d in request.form.getlist("destino") if d.isdigit()]
+        if not destinos:
+            flash("Marque ao menos um ativo.", "erro")
+        else:
+            resultado = servicos.relacionar_em_lote(
+                con, id_item, destinos, tipo_relacao,
+                request.form.get("criticidade", "media"),
+                request.form.get("mecanismo") or None, usuario_atual())
+            partes = [f"{resultado['criadas']} relação(ões) registrada(s)"]
+            if resultado["ignoradas"]:
+                partes.append(f"{resultado['ignoradas']} já existiam")
+            flash(". ".join(partes) + ".", "ok")
+            for erro in resultado["erros"]:
+                flash(erro, "erro")
+            return redirect(url_for("web.detalhe", id_item=id_item, aba="relacoes"))
+
+    sugeridos = tipos.DESTINOS_SUGERIDOS.get(tipo_relacao, ())
+    todos = request.values.get("todos") == "1"
+    marcas = ",".join("?" * len(sugeridos))
+    sql = ("SELECT i.id_item, i.codigo, i.nome, i.tipo_item, i.status_ciclo_vida,"
+           " p.nome AS pai_nome,"
+           " EXISTS (SELECT 1 FROM relacionamento_ativo r WHERE r.id_origem = ?"
+           "   AND r.id_destino = i.id_item AND r.tipo_relacao = ?) AS ja_existe"
+           " FROM item_catalogo i LEFT JOIN item_catalogo p ON p.id_item = i.id_pai"
+           " WHERE i.id_item <> ? AND i.status_ciclo_vida NOT IN ('arquivado')")
+    params: list = [id_item, tipo_relacao, id_item]
+    if sugeridos and not todos:
+        sql += f" AND i.tipo_item IN ({marcas})"
+        params += list(sugeridos)
+    candidatos = [dict(l) for l in con.execute(
+        sql + " ORDER BY i.tipo_item, i.nome LIMIT 400", params)]
+
+    return render_template("relacoes_lote.html", item=dict(item),
+                           trilha=servicos.trilha(con, id_item),
+                           candidatos=candidatos, tipo_relacao=tipo_relacao,
+                           relacoes=tipos.RELACOES, mecanismos=tipos.MECANISMOS,
+                           sugeridos=sugeridos, todos=todos)
 
 
 @bp.route("/ativo/<int:id_item>/comparar")

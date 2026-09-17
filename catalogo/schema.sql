@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS item_catalogo (
     status_ciclo_vida TEXT NOT NULL DEFAULT 'rascunho',
     criticidade      TEXT NOT NULL DEFAULT 'media',   -- baixa|media|alta|critica
     atributos        TEXT NOT NULL DEFAULT '{}',      -- campos específicos do tipo (JSON)
+    origem           TEXT NOT NULL DEFAULT 'manual',  -- manual|automatica (descoberta)
     revisao_atual    INTEGER,
     inicio_vigencia  TEXT,
     fim_vigencia     TEXT,

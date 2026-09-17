@@ -159,6 +159,38 @@
         {% else %}
           <p class="vazio">Nenhuma relação registrada. Vincule este ativo a uma capacidade abaixo.</p>
         {% endif %}
+        <p><a class="botao secundario"
+              href="{{ url_for('web.relacoes_lote', id_item=item.id_item) }}">Registrar várias de uma vez</a></p>
+      </div>
+
+      {# --------------------------------------------- P16: quem depende daqui #}
+      <div class="cartao">
+        <h2>Quem depende deste ativo</h2>
+        {% if analise.total %}
+          <p class="discreto">
+            {{ analise.total }} consumidor(es) vigente(s)
+            {%- if analise.criticos %}, sendo
+              <strong class="score ruim">{{ analise.criticos|length }} de alta criticidade</strong>{% endif %}.
+            {% for tipo, n in analise.por_tipo.items() %}{{ n }} {{ tipo|rotulo_tipo|lower }}{{ ', ' if not loop.last }}{% endfor %}.
+          </p>
+          <table>
+            <thead><tr><th scope="col">Consumidor</th><th scope="col">Relação</th>
+                       <th scope="col">Criticidade</th></tr></thead>
+            <tbody>
+            {% for c in analise.consumidores %}
+              <tr><td><a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
+                      <span class="discreto">({{ c.tipo_item|rotulo_tipo }})</span></td>
+                  <td>{{ c.tipo_relacao }}</td>
+                  <td><span class="etiqueta {{ c.criticidade }}">{{ c.criticidade }}</span></td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          <p class="discreto">É esta a lista afetada por uma mudança de contrato ou pela
+             descontinuação deste ativo.</p>
+        {% else %}
+          <p class="vazio">Nenhum ativo vigente depende deste. Mudanças aqui não quebram
+             ninguém no catálogo.</p>
+        {% endif %}
       </div>
 
       {# ----------------------------------- P11: seletor com busca e mecanismo #}
@@ -374,7 +406,21 @@
 
       {% if item.status_ciclo_vida in ('publicado', 'em_revisao') %}
         <h3>Descontinuar</h3>
-        <p class="discreto">{{ impacto|length }} consumidor(es) ativo(s) seriam afetados.</p>
+        {% if analise.total %}
+          <p class="discreto">{{ analise.total }} consumidor(es) vigente(s) seriam afetados
+            {%- if analise.criticos %}, <strong class="score ruim">{{ analise.criticos|length }} de alta criticidade</strong>{% endif %}.</p>
+          <details class="impacto">
+            <summary>Ver quem seria afetado</summary>
+            <ul>
+              {% for c in analise.consumidores %}
+                <li><a href="{{ url_for('web.detalhe', id_item=c.id_item) }}">{{ c.nome }}</a>
+                  <span class="discreto">{{ c.tipo_relacao }} · {{ c.criticidade }}</span></li>
+              {% endfor %}
+            </ul>
+          </details>
+        {% else %}
+          <p class="discreto">Nenhum consumidor vigente seria afetado.</p>
+        {% endif %}
         <form method="post" action="{{ url_for('web.descontinuar', id_item=item.id_item) }}">
           <div class="campo"><label for="motivo_desc">Motivo</label>
             <input type="text" id="motivo_desc" name="motivo" required></div>
