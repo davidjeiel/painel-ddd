@@ -7,6 +7,13 @@ validação em etapas, revisões imutáveis, qualidade cadastral e painel execut
 O objetivo é o MVP descrito no roadmap da proposta (fases 1 e 2), pronto para o piloto
 de dois domínios, sem dependências além do Flask.
 
+**Estado atual do piloto**: 76 testes automatizados verdes e as 203 rotas navegáveis do
+cenário piloto conferidas sem erro nem rolagem horizontal, depois de duas ondas de
+jornada de usuário sobre o MVP inicial — filtros com estado persistente, fila de trabalho
+por pessoa (`/meu-trabalho`), central de validações com diff e atribuição, descoberta
+automática com prévia e bandeja de triagem, relações em lote e o mapa de tecnologia ao
+lado do mapa de negócio.
+
 ## Como rodar
 
 ```bash
@@ -49,6 +56,9 @@ Quatro experiências nucleares, como recomendado na proposta:
   Histórico (`?aba=`), com os formulários de escrita dentro da aba a que pertencem, e o
   **caminho até a publicação**: cinco passos com o estado real derivado do pré-check,
   cada um levando à aba que resolve a pendência.
+- **Relações em lote** (`/ativo/<id>/relacoes-lote`) — mapeia de uma vez as dependências
+  de uma aplicação inteira: marca vários destinos, filtra pelos tipos sugeridos para a
+  relação escolhida (ou mostra todos) e ignora o que já existe em vez de duplicar.
 - **Minha mesa** (`/meu-trabalho`) — análises que você assumiu, fila livre para assumir,
   seus rascunhos e seus ativos aguardando decisão de terceiros.
 - **Central de validações** (`/validacoes`) — fila priorizada por criticidade e SLA, com
