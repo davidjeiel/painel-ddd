@@ -3,17 +3,52 @@ from __future__ import annotations
 
 import json
 
-from flask import (Blueprint, flash, redirect, render_template, request,
-                   session, url_for)
+from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
+                   request, session, url_for)
 
 from . import governanca, servicos, tipos
 from .db import get_db
 
 bp = Blueprint("web", __name__)
 
+# Seção do menu a que cada tela pertence. O destaque do menu passa a ser por
+# família de rota: entrar num ativo não apaga mais o "você está aqui".
+SECOES = {
+    "web.dashboard": "painel",
+    "web.catalogo": "catalogo",
+    "web.detalhe": "catalogo",
+    "web.editar": "catalogo",
+    "web.responsavel": "catalogo",
+    "web.relacao": "catalogo",
+    "web.evidencia": "catalogo",
+    "web.submeter": "catalogo",
+    "web.revisar": "catalogo",
+    "web.descontinuar": "catalogo",
+    "web.comparar": "catalogo",
+    "web.mapa": "mapa",
+    "web.novo_ativo": "novo",
+    "web.validacoes": "validacoes",
+    "web.decidir": "validacoes",
+    "web.politicas": "politicas",
+}
+
+# Filtros do catálogo, com o rótulo usado nos chips de filtro ativo.
+FILTROS_CATALOGO = {
+    "termo": "Busca",
+    "tipo_item": "Tipo",
+    "status": "Status",
+    "id_squad": "Squad",
+    "criticidade": "Criticidade",
+    "sem_owner": "Sem responsável",
+}
+
 
 def usuario_atual() -> str:
     return session.get("usuario", "curador.demo")
+
+
+def secao_atual() -> str:
+    return SECOES.get(request.endpoint or "", "")
 
 
 @bp.app_template_filter("rotulo_tipo")
@@ -31,10 +66,21 @@ def filtro_sla(prazo):
     return governanca.sla_restante(prazo)
 
 
+@bp.app_template_filter("numero")
+def filtro_numero(valor):
+    """9.0 vira '9'; 8.5 vira '8,5' — separador decimal em português."""
+    if valor is None:
+        return "—"
+    if float(valor) == int(valor):
+        return str(int(valor))
+    return f"{float(valor):.1f}".replace(".", ",")
+
+
 @bp.app_context_processor
 def contexto():
     return {"TIPOS": tipos.TIPOS, "CICLO": tipos.CICLO_VIDA,
-            "CRITICIDADES": tipos.CRITICIDADES, "usuario": usuario_atual()}
+            "CRITICIDADES": tipos.CRITICIDADES, "usuario": usuario_atual(),
+            "secao": secao_atual()}
 
 
 # ------------------------------------------------------------------ dashboard
@@ -44,6 +90,7 @@ def dashboard():
     return render_template(
         "dashboard.html",
         kpis=servicos.indicadores(con),
+        variacao=servicos.variacao_indicadores(con),
         cobertura=servicos.cobertura_por_dominio(con),
         pendencias=servicos.pendencias_prioritarias(con),
         serie=servicos.serie_historica(con, "cobertura"),
@@ -52,50 +99,122 @@ def dashboard():
     )
 
 
+# ---------------------------------------------------------------- busca global
+@bp.route("/busca/sugestoes")
+def sugestoes():
+    """Resultados instantâneos para a busca do cabeçalho."""
+    termo = request.args.get("termo", "").strip()
+    if len(termo) < 2:
+        return jsonify({"termo": termo, "itens": []})
+    achados = servicos.buscar(get_db(), termo=termo, limite=8)
+    return jsonify({"termo": termo, "itens": [
+        {"id_item": i["id_item"], "nome": i["nome"], "codigo": i["codigo"],
+         "tipo": rotulo_tipo(i["tipo_item"]),
+         "status": rotulo_status(i["status_ciclo_vida"]),
+         "url": url_for("web.detalhe", id_item=i["id_item"])}
+        for i in achados]})
+
+
 # -------------------------------------------------------------------- catálogo
+def _filtros_do_pedido() -> dict:
+    """Filtros da requisição, ou os últimos usados quando não veio nenhum.
+
+    Sem argumentos na URL a tela retoma o recorte anterior — era a promessa de
+    "filtros persistentes por sessão" que a sessão guardava e ninguém lia.
+    """
+    if request.args.get("limpar"):
+        session.pop("filtros_catalogo", None)
+        return {chave: "" for chave in FILTROS_CATALOGO}
+    if not request.args:
+        guardados = session.get("filtros_catalogo") or {}
+        return {chave: str(guardados.get(chave, "")) for chave in FILTROS_CATALOGO}
+    return {chave: request.args.get(chave, "").strip() for chave in FILTROS_CATALOGO}
+
+
+def _chips(filtros: dict, squads: list[dict]) -> list[dict]:
+    """Filtros ativos como etiquetas removíveis, cada uma com a URL sem ela."""
+    nomes_squad = {str(s["id_squad"]): s["nome"] for s in squads}
+    chips = []
+    for chave, valor in filtros.items():
+        if not valor:
+            continue
+        if chave == "tipo_item":
+            legivel = rotulo_tipo(valor)
+        elif chave == "status":
+            legivel = rotulo_status(valor)
+        elif chave == "id_squad":
+            legivel = nomes_squad.get(str(valor), valor)
+        elif chave == "sem_owner":
+            legivel = "sim"
+        else:
+            legivel = valor
+        restante = {k: v for k, v in filtros.items() if v and k != chave}
+        chips.append({"chave": chave, "rotulo": FILTROS_CATALOGO[chave],
+                      "valor": legivel,
+                      "url": url_for("web.catalogo", **restante) if restante
+                             else url_for("web.catalogo", limpar=1)})
+    return chips
+
+
 @bp.route("/catalogo")
 def catalogo():
     con = get_db()
-    filtros = {
-        "termo": request.args.get("termo", "").strip(),
-        "tipo_item": request.args.get("tipo_item", ""),
-        "status": request.args.get("status", ""),
-        "id_squad": request.args.get("id_squad", ""),
-        "criticidade": request.args.get("criticidade", ""),
-    }
+    filtros = _filtros_do_pedido()
     session["filtros_catalogo"] = filtros  # filtros persistentes
     itens = servicos.buscar(con, **filtros)
     squads = [dict(l) for l in con.execute("SELECT * FROM squad ORDER BY nome")]
-    return render_template("catalogo.html", itens=itens, filtros=filtros, squads=squads)
+    return render_template("catalogo.html", itens=itens, filtros=filtros,
+                           squads=squads, chips=_chips(filtros, squads))
 
 
 @bp.route("/mapa")
 def mapa():
     con = get_db()
-    arvore = []
-    for dominio in con.execute(
-        "SELECT * FROM item_catalogo WHERE tipo_item = 'dominio' ORDER BY nome"
-    ):
-        subs = []
-        for sub in con.execute(
-            "SELECT * FROM item_catalogo WHERE id_pai = ? ORDER BY nome",
-            (dominio["id_item"],)
-        ):
-            contextos = []
-            for ctx in con.execute(
-                "SELECT * FROM item_catalogo WHERE id_pai = ? ORDER BY nome",
-                (sub["id_item"],)
-            ):
-                caps = [dict(c) for c in con.execute(
-                    "SELECT i.*, (SELECT COUNT(*) FROM relacionamento_ativo r "
-                    " WHERE r.id_destino = i.id_item AND r.tipo_relacao = 'implementa'"
-                    "   AND r.fim_vigencia IS NULL) AS implementacoes "
-                    "FROM item_catalogo i WHERE i.id_pai = ? ORDER BY i.nome",
-                    (ctx["id_item"],))]
-                contextos.append({**dict(ctx), "capacidades": caps})
-            subs.append({**dict(sub), "contextos": contextos})
-        arvore.append({**dict(dominio), "subdominios": subs})
-    return render_template("mapa.html", arvore=arvore)
+    # árvore inteira (domínio→subdomínio→contexto→capacidade) em uma única
+    # ida ao banco via LEFT JOINs, em vez de uma query por nível/linha (N+1)
+    linhas = con.execute(
+        "SELECT d.id_item AS d_id, d.nome AS d_nome, d.status_ciclo_vida AS d_status,"
+        " s.id_item AS s_id, s.nome AS s_nome,"
+        " c.id_item AS c_id, c.nome AS c_nome,"
+        " cap.id_item AS cap_id, cap.nome AS cap_nome,"
+        " (SELECT COUNT(*) FROM relacionamento_ativo r WHERE r.id_destino = cap.id_item"
+        "   AND r.tipo_relacao = 'implementa' AND r.fim_vigencia IS NULL) AS cap_implementacoes"
+        " FROM item_catalogo d"
+        " LEFT JOIN item_catalogo s ON s.id_pai = d.id_item"
+        " LEFT JOIN item_catalogo c ON c.id_pai = s.id_item"
+        " LEFT JOIN item_catalogo cap ON cap.id_pai = c.id_item"
+        " WHERE d.tipo_item = 'dominio'"
+        " ORDER BY d.nome, s.nome, c.nome, cap.nome"
+    ).fetchall()
+
+    dominios: dict[int, dict] = {}
+    subs: dict[int, dict] = {}
+    contextos: dict[int, dict] = {}
+    for l in linhas:
+        dominio = dominios.get(l["d_id"])
+        if dominio is None:
+            dominio = {"id_item": l["d_id"], "nome": l["d_nome"],
+                      "status_ciclo_vida": l["d_status"], "subdominios": []}
+            dominios[l["d_id"]] = dominio
+        if l["s_id"] is None:
+            continue
+        sub = subs.get(l["s_id"])
+        if sub is None:
+            sub = {"id_item": l["s_id"], "nome": l["s_nome"], "contextos": []}
+            subs[l["s_id"]] = sub
+            dominio["subdominios"].append(sub)
+        if l["c_id"] is None:
+            continue
+        ctx = contextos.get(l["c_id"])
+        if ctx is None:
+            ctx = {"id_item": l["c_id"], "nome": l["c_nome"], "capacidades": []}
+            contextos[l["c_id"]] = ctx
+            sub["contextos"].append(ctx)
+        if l["cap_id"] is None:
+            continue
+        ctx["capacidades"].append({"id_item": l["cap_id"], "nome": l["cap_nome"],
+                                   "implementacoes": l["cap_implementacoes"]})
+    return render_template("mapa.html", arvore=list(dominios.values()))
 
 
 # ---------------------------------------------------------------------- wizard
@@ -134,7 +253,7 @@ def novo_ativo():
     squads = [dict(l) for l in con.execute("SELECT * FROM squad ORDER BY nome")]
     return render_template("wizard.html", tipo_item=tipo_item, pais=pais,
                            squads=squads, blocos=tipos.blocos(),
-                           form=request.form)
+                           form=request.form, valores=request.values)
 
 
 # ------------------------------------------------------------------- visão 360
@@ -150,6 +269,7 @@ def detalhe(id_item: int):
         "ORDER BY tipo_item, nome LIMIT 300", (id_item,))]
     return render_template("detalhe.html", **dados, pessoas=pessoas,
                            candidatos=candidatos, relacoes=tipos.RELACOES,
+                           trilha=servicos.trilha(con, id_item),
                            precheck=governanca.pre_check(con, id_item))
 
 
@@ -249,13 +369,15 @@ def descontinuar(id_item: int):
 @bp.route("/ativo/<int:id_item>/comparar")
 def comparar(id_item: int):
     con = get_db()
+    item = con.execute(
+        "SELECT * FROM item_catalogo WHERE id_item = ?", (id_item,)).fetchone()
+    if item is None:
+        abort(404)
     a = int(request.args.get("a", 1))
     b = int(request.args.get("b", 2))
     return render_template("comparar.html", id_item=id_item, a=a, b=b,
                            diff=servicos.comparar_revisoes(con, id_item, a, b),
-                           item=con.execute(
-                               "SELECT * FROM item_catalogo WHERE id_item = ?",
-                               (id_item,)).fetchone())
+                           trilha=servicos.trilha(con, id_item), item=item)
 
 
 # ------------------------------------------------------- central de validações

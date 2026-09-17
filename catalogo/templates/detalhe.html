@@ -3,6 +3,8 @@
 
 {% block conteudo %}
 {% set t = TIPOS[item.tipo_item] %}
+{% set atual = item.nome %}
+{% include "_trilha.html" with context %}
 <div class="cabecalho">
   <h1>{{ item.nome }}</h1>
   <p class="mono">{{ item.codigo }} · {{ item.tipo_item|rotulo_tipo }} ·

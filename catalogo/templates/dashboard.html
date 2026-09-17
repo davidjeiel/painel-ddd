@@ -7,17 +7,41 @@
   <p>Saúde do catálogo, cobertura de capacidades e pendências que precisam de ação.</p>
 </div>
 
+{# Variação contra a competência anterior. `invertido` marca os indicadores em
+   que cair é bom — pendências e ativos sem responsável. #}
+{% macro delta(chave, invertido=false) %}
+  {% set d = variacao.get(chave) %}
+  {% if d %}
+    <div class="delta {{ 'bom' if ((d < 0) if invertido else (d > 0)) else 'ruim' }}"
+         title="Variação em relação à competência anterior">
+      <span aria-hidden="true">{{ '▲' if d > 0 else '▼' }}</span> {{ d|abs|numero }} no mês
+    </div>
+  {% endif %}
+{% endmacro %}
+
 <div class="grade kpis">
-  <div class="kpi"><div class="rotulo">Domínios vigentes</div><div class="valor">{{ kpis.dominios }}</div></div>
-  <div class="kpi"><div class="rotulo">Capacidades</div><div class="valor">{{ kpis.capacidades }}</div></div>
-  <div class="kpi"><div class="rotulo">Cobertura média</div>
-    <div class="valor {{ 'bom' if kpis.cobertura >= 80 else 'alerta' }}">{{ kpis.cobertura }}%</div></div>
-  <div class="kpi"><div class="rotulo">Sem responsável</div>
-    <div class="valor {{ 'risco' if kpis.sem_owner else 'bom' }}">{{ kpis.sem_owner }}</div></div>
-  <div class="kpi"><div class="rotulo">APIs governadas</div>
-    <div class="valor {{ 'bom' if kpis.apis_governadas >= 80 else 'alerta' }}">{{ kpis.apis_governadas }}%</div></div>
-  <div class="kpi"><div class="rotulo">Pendências</div>
-    <div class="valor {{ 'alerta' if kpis.pendencias else 'bom' }}">{{ kpis.pendencias }}</div></div>
+  <a class="kpi" href="{{ url_for('web.catalogo', tipo_item='dominio') }}">
+    <div class="rotulo">Domínios vigentes</div><div class="valor">{{ kpis.dominios }}</div>
+    {{ delta('dominios') }}</a>
+  <a class="kpi" href="{{ url_for('web.catalogo', tipo_item='capacidade') }}">
+    <div class="rotulo">Capacidades</div><div class="valor">{{ kpis.capacidades }}</div>
+    {{ delta('capacidades') }}</a>
+  <a class="kpi" href="{{ url_for('web.mapa') }}">
+    <div class="rotulo">Cobertura média</div>
+    <div class="valor {{ 'bom' if kpis.cobertura >= 80 else 'alerta' }}">{{ kpis.cobertura }}%</div>
+    {{ delta('cobertura') }}</a>
+  <a class="kpi" href="{{ url_for('web.catalogo', sem_owner=1) }}">
+    <div class="rotulo">Sem responsável</div>
+    <div class="valor {{ 'risco' if kpis.sem_owner else 'bom' }}">{{ kpis.sem_owner }}</div>
+    {{ delta('sem_owner', invertido=true) }}</a>
+  <a class="kpi" href="{{ url_for('web.catalogo', tipo_item='api') }}">
+    <div class="rotulo">APIs governadas</div>
+    <div class="valor {{ 'bom' if kpis.apis_governadas >= 80 else 'alerta' }}">{{ kpis.apis_governadas }}%</div>
+    {{ delta('apis_governadas') }}</a>
+  <a class="kpi" href="{{ url_for('web.validacoes') }}">
+    <div class="rotulo">Pendências</div>
+    <div class="valor {{ 'alerta' if kpis.pendencias else 'bom' }}">{{ kpis.pendencias }}</div>
+    {{ delta('pendencias', invertido=true) }}</a>
 </div>
 
 <div class="grade duas" style="margin-top:16px">

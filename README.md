@@ -32,10 +32,12 @@ O banco fica em `dados/catalogo.db` (configurável pela variável `CATALOGO_DB`)
 
 Quatro experiências nucleares, como recomendado na proposta:
 
-- **Visão executiva** (`/`) — KPIs, cobertura por domínio, qualidade cadastral,
+- **Visão executiva** (`/`) — KPIs clicáveis (cada número leva ao recorte que resume),
+  variação contra a competência anterior, cobertura por domínio, qualidade cadastral,
   pendências prioritárias com drill-through e evolução mensal.
-- **Catálogo de ativos** (`/catalogo`) — busca, filtros persistentes por sessão,
-  status, criticidade e score.
+- **Catálogo de ativos** (`/catalogo`) — busca, filtros persistentes por sessão
+  (retomados quando a tela é aberta sem parâmetros), chips de filtro ativo com
+  remoção individual, recorte "somente sem responsável", status, criticidade e score.
 - **Wizard de cadastro** (`/ativo/novo`) — campos dinâmicos por tipo de ativo,
   contexto herdado do pai e checklist do que a política exige.
 - **Visão 360°** (`/ativo/<id>`) — negócio, tecnologia, ownership, relações de entrada
@@ -44,6 +46,10 @@ Quatro experiências nucleares, como recomendado na proposta:
   checklist de governança e decisão com parecer.
 - **Mapa DDD** (`/mapa`) — árvore Domínio → Subdomínio → Contexto → Capacidade com
   cobertura de implementação.
+
+Em todas as telas: busca global no cabeçalho (`/` ou `Ctrl+K` para focar, sugestões
+instantâneas por `/busca/sugestoes`), trilha hierárquica clicável nas telas de ativo e
+destaque de menu por família de rota — abrir um ativo não apaga mais o "você está aqui".
 
 ## Modelo de dados
 
@@ -120,9 +126,14 @@ pip install pytest
 pytest -q
 ```
 
-Cobrem hierarquia inválida, duplicidade, pré-check sem owner, fluxo completo até a
-publicação, imutabilidade do publicado, rejeição, dependência circular, bloqueio de
-descontinuação e evolução do score.
+`tests/test_governanca.py` cobre hierarquia inválida, duplicidade, pré-check sem owner,
+fluxo completo até a publicação, imutabilidade do publicado, rejeição, dependência
+circular, bloqueio de descontinuação e evolução do score.
+
+`tests/test_jornada.py` cobre a navegação: trilha hierárquica, destaque de menu dentro de
+um ativo, sugestões da busca global, filtros retomados e limpos, recorte sem responsável,
+KPIs que levam ao recorte, leitura da variação mensal e o formulário de cadastro que
+devolve tudo o que foi digitado depois de um erro de regra de negócio.
 
 ## Estrutura
 
@@ -140,7 +151,7 @@ catalogo/
   api.py           API JSON
   seed.py          carga dos dois domínios piloto
 docs/MODELO.md     modelo de dados e decisões
-tests/             testes das regras de governança
+tests/             regras de governança (test_governanca) e navegação (test_jornada)
 ```
 
 ## O que ficou fora do MVP

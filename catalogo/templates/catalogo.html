@@ -8,7 +8,7 @@
 </div>
 
 <div class="cartao">
-  <form method="get" class="linha-campos" style="align-items:end">
+  <form method="get" class="linha-campos filtros" style="align-items:end">
     <div class="campo">
       <label for="termo">Buscar</label>
       <input type="search" id="termo" name="termo" value="{{ filtros.termo }}"
@@ -50,11 +50,30 @@
         {% endfor %}
       </select>
     </div>
+    <div class="campo">
+      <label for="sem_owner">Responsável</label>
+      <select id="sem_owner" name="sem_owner">
+        <option value="">Qualquer</option>
+        <option value="1" {{ 'selected' if filtros.sem_owner }}>Somente sem responsável</option>
+      </select>
+    </div>
     <div class="campo acoes">
       <button type="submit">Aplicar filtros</button>
       <a class="botao secundario" href="{{ url_for('web.novo_ativo') }}">Novo ativo</a>
     </div>
   </form>
+
+  {% if chips %}
+    <div class="chips" aria-label="Filtros ativos">
+      <span class="discreto">Filtrando por</span>
+      {% for c in chips %}
+        <a class="chip" href="{{ c.url }}" title="Remover o filtro {{ c.rotulo|lower }}">
+          {{ c.rotulo }}: <strong>{{ c.valor }}</strong> <span aria-hidden="true">×</span>
+        </a>
+      {% endfor %}
+      <a class="chip limpar" href="{{ url_for('web.catalogo', limpar=1) }}">Limpar tudo</a>
+    </div>
+  {% endif %}
 </div>
 
 <div class="cartao">
@@ -82,7 +101,8 @@
       </tr>
     {% else %}
       <tr><td colspan="7" class="vazio">Nenhum ativo corresponde a esses filtros.
-        <a href="{{ url_for('web.novo_ativo') }}">Cadastrar um ativo</a>.</td></tr>
+        {% if chips %}<a href="{{ url_for('web.catalogo', limpar=1) }}">Limpar os filtros</a> ou
+        {% endif %}<a href="{{ url_for('web.novo_ativo') }}">cadastrar um ativo</a>.</td></tr>
     {% endfor %}
     </tbody>
   </table>

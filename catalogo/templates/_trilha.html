@@ -1,0 +1,11 @@
+{# Trilha hierárquica: Catálogo › Domínio › Subdomínio › Contexto › ativo atual. #}
+<nav class="trilha" aria-label="Trilha hierárquica">
+  <a href="{{ url_for('web.catalogo') }}">Catálogo</a>
+  {% for pai in trilha %}
+    <span class="sep" aria-hidden="true">›</span>
+    <a href="{{ url_for('web.detalhe', id_item=pai.id_item) }}"
+       title="{{ pai.tipo_item|rotulo_tipo }}">{{ pai.nome }}</a>
+  {% endfor %}
+  <span class="sep" aria-hidden="true">›</span>
+  <span class="atual" aria-current="page">{{ atual }}</span>
+</nav>

@@ -14,6 +14,11 @@ def erro_regra(exc):
     return jsonify({"erro": str(exc)}), 422
 
 
+@bp.errorhandler(KeyError)
+def erro_campo_ausente(exc):
+    return jsonify({"erro": f"campo obrigatório ausente ou inválido: {exc}"}), 400
+
+
 @bp.get("/itens")
 def listar_itens():
     itens = servicos.buscar(

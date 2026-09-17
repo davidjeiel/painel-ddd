@@ -140,8 +140,9 @@ def test_descontinuacao_bloqueada_por_consumidor_critico(con):
                                  descricao="App", id_pai=sis,
                                  atributos={"tecnologia": "COBOL"})
     servicos.relacionar(con, app_id, cap, "implementa", criticidade="critica")
-    con.execute("UPDATE item_catalogo SET status_ciclo_vida = 'publicado' WHERE id_item = ?",
-                (app_id,))
+    con.execute(
+        "UPDATE item_catalogo SET status_ciclo_vida = 'publicado' WHERE id_item IN (?, ?)",
+        (app_id, cap))
     con.commit()
     resultado = servicos.descontinuar(con, cap, "obsoleta")
     assert resultado["bloqueado"]

@@ -184,17 +184,22 @@ def media_geral(con) -> int:
 
 
 def proxima_revisao(con, id_item: int) -> str | None:
+    item = con.execute(
+        "SELECT tipo_item, criticidade, atualizado_em FROM item_catalogo WHERE id_item = ?",
+        (id_item,),
+    ).fetchone()
+    if item is None:
+        return None
+    # mesmo padrão de filtro usado em avaliar(): a política específica da
+    # criticidade do item vence a política '*' (curinga), nunca o contrário
     pol = con.execute(
         "SELECT periodicidade_revisao_dias d FROM politica_governanca "
-        "WHERE tipo_item = (SELECT tipo_item FROM item_catalogo WHERE id_item = ?) "
+        "WHERE tipo_item = ? AND criticidade IN (?, '*') "
         "ORDER BY criticidade DESC LIMIT 1",
-        (id_item,),
+        (item["tipo_item"], item["criticidade"]),
     ).fetchone()
     if not pol:
         return None
-    item = con.execute(
-        "SELECT atualizado_em FROM item_catalogo WHERE id_item = ?", (id_item,)
-    ).fetchone()
     try:
         base = datetime.fromisoformat(item["atualizado_em"]).date()
     except (TypeError, ValueError):

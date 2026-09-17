@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from datetime import date, datetime
 
 from . import governanca, qualidade, tipos
@@ -138,9 +139,13 @@ def relacionar(con, id_origem: int, id_destino: int, tipo_relacao: str,
         "VALUES (?,?,?,?,?,?)",
         (id_origem, id_destino, tipo_relacao, criticidade, mecanismo, origem_evidencia),
     )
+    inserida = cur.rowcount == 1
     if tipo_relacao == "depende_de" and governanca._tem_ciclo(con, id_origem):
-        con.execute("DELETE FROM relacionamento_ativo WHERE id_relacao = ?",
-                    (cur.lastrowid,))
+        # só apaga se este INSERT realmente criou a linha; se foi ignorado por
+        # duplicidade (relação já existente), cur.lastrowid não se refere a ela
+        if inserida:
+            con.execute("DELETE FROM relacionamento_ativo WHERE id_relacao = ?",
+                        (cur.lastrowid,))
         con.commit()
         raise RegraDeNegocio("relação criaria dependência circular entre contextos")
     auditar(con, id_origem, "relacionar", usuario,
@@ -193,29 +198,40 @@ def submeter(con, id_item: int, motivo: str = "", usuario: str = "sistema") -> d
     if not resultado["aprovado"]:
         return resultado
 
-    ultimo = con.execute(
-        "SELECT COALESCE(MAX(numero_revisao), 0) n FROM revisao_catalogo WHERE id_item = ?",
-        (id_item,),
-    ).fetchone()["n"]
     payload = _snapshot(con, id_item)
     bruto = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-    cur = con.execute(
-        "INSERT INTO revisao_catalogo "
-        "(id_item, numero_revisao, payload, payload_hash, motivo, criado_por) "
-        "VALUES (?,?,?,?,?,?)",
-        (id_item, ultimo + 1, bruto,
-         hashlib.sha256(bruto.encode("utf-8")).hexdigest(), motivo, usuario),
-    )
+    # numero_revisao é calculado dentro do próprio INSERT (não em um SELECT
+    # separado) para que a leitura do MAX e a escrita sejam uma única
+    # operação atômica sob a trava de escrita do SQLite, evitando a corrida
+    # entre submissões concorrentes do mesmo item.
+    try:
+        cur = con.execute(
+            "INSERT INTO revisao_catalogo "
+            "(id_item, numero_revisao, payload, payload_hash, motivo, criado_por) "
+            "SELECT ?, COALESCE(MAX(numero_revisao), 0) + 1, ?, ?, ?, ? "
+            "FROM revisao_catalogo WHERE id_item = ?",
+            (id_item, bruto, hashlib.sha256(bruto.encode("utf-8")).hexdigest(),
+             motivo, usuario, id_item),
+        )
+    except sqlite3.IntegrityError:
+        con.rollback()
+        raise RegraDeNegocio(
+            "conflito ao gerar número de revisão; tente submeter novamente")
     id_revisao = cur.lastrowid
+    numero_revisao = con.execute(
+        "SELECT numero_revisao FROM revisao_catalogo WHERE id_revisao = ?",
+        (id_revisao,),
+    ).fetchone()["numero_revisao"]
     if origem == "rascunho":
         con.execute(
             "UPDATE item_catalogo SET status_ciclo_vida = 'em_validacao',"
             " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
     governanca.abrir_validacoes(con, id_item, id_revisao, usuario)
-    auditar(con, id_item, "submeter", usuario, depois={"revisao": ultimo + 1, "motivo": motivo})
+    auditar(con, id_item, "submeter", usuario,
+            depois={"revisao": numero_revisao, "motivo": motivo})
     con.commit()
     resultado["id_revisao"] = id_revisao
-    resultado["numero_revisao"] = ultimo + 1
+    resultado["numero_revisao"] = numero_revisao
     return resultado
 
 
@@ -292,6 +308,14 @@ def abrir_revisao(con, id_item: int, usuario: str = "sistema") -> None:
 
 def descontinuar(con, id_item: int, motivo: str, usuario: str = "sistema",
                  forcar: bool = False) -> dict:
+    item = con.execute(
+        "SELECT status_ciclo_vida FROM item_catalogo WHERE id_item = ?", (id_item,)
+    ).fetchone()
+    if item is None:
+        raise RegraDeNegocio("item não encontrado")
+    atual = item["status_ciclo_vida"]
+    if "descontinuado" not in governanca.TRANSICOES.get(atual, set()):
+        raise RegraDeNegocio(f"transição inválida: {atual} → descontinuado")
     impacto = governanca.impacto_descontinuacao(con, id_item)
     criticos = [i for i in impacto if i["criticidade"] in ("alta", "critica")]
     if criticos and not forcar:
@@ -326,7 +350,7 @@ def alterar_status(con, id_item: int, novo: str, usuario: str = "sistema") -> No
 
 # ------------------------------------------------------------------ consultas
 def buscar(con, termo: str = "", tipo_item: str = "", status: str = "",
-           id_squad: str | int = "", criticidade: str = "",
+           id_squad: str | int = "", criticidade: str = "", sem_owner: str = "",
            limite: int = 200) -> list[dict]:
     sql = [
         "SELECT i.*, s.nome AS squad,",
@@ -355,9 +379,33 @@ def buscar(con, termo: str = "", tipo_item: str = "", status: str = "",
     if criticidade:
         sql.append("AND i.criticidade = ?")
         params.append(criticidade)
+    if sem_owner:
+        # recorte do KPI "Sem responsável" do painel executivo
+        sql.append("AND NOT EXISTS (SELECT 1 FROM responsabilidade r "
+                   "WHERE r.id_item = i.id_item AND r.fim_vigencia IS NULL)")
     sql.append("ORDER BY i.tipo_item, i.nome LIMIT ?")
     params.append(limite)
     return [dict(l) for l in con.execute(" ".join(sql), params)]
+
+
+def trilha(con, id_item: int) -> list[dict]:
+    """Ancestrais de um ativo, da raiz até o pai direto.
+
+    Sobe a hierarquia por ``id_pai`` numa única consulta recursiva, para que a
+    interface possa mostrar Domínio › Subdomínio › Contexto › Capacidade sem
+    uma ida ao banco por nível.
+    """
+    linhas = con.execute(
+        "WITH RECURSIVE sobe(id_item, id_pai, nome, tipo_item, nivel) AS ("
+        "  SELECT id_item, id_pai, nome, tipo_item, 0"
+        "    FROM item_catalogo WHERE id_item = ?"
+        "  UNION ALL"
+        "  SELECT p.id_item, p.id_pai, p.nome, p.tipo_item, s.nivel + 1"
+        "    FROM item_catalogo p JOIN sobe s ON p.id_item = s.id_pai"
+        "   WHERE s.nivel < 12"
+        ") SELECT id_item, nome, tipo_item FROM sobe WHERE nivel > 0"
+        " ORDER BY nivel DESC", (id_item,)).fetchall()
+    return [dict(l) for l in linhas]
 
 
 def visao_360(con, id_item: int) -> dict:
@@ -551,3 +599,18 @@ def serie_historica(con, indicador: str) -> list[dict]:
     return [dict(l) for l in con.execute(
         "SELECT competencia, valor FROM snapshot_indicador "
         "WHERE indicador = ? ORDER BY competencia", (indicador,))]
+
+
+def variacao_indicadores(con) -> dict[str, float]:
+    """Diferença de cada indicador entre as duas últimas competências.
+
+    Um número sozinho não diz se a situação melhorou; a série mensal já está
+    materializada em ``snapshot_indicador`` e só faltava chegar ao painel.
+    """
+    series: dict[str, list[float]] = {}
+    for linha in con.execute(
+            "SELECT indicador, valor FROM snapshot_indicador "
+            "ORDER BY indicador, competencia"):
+        series.setdefault(linha["indicador"], []).append(linha["valor"])
+    return {chave: round(valores[-1] - valores[-2], 1)
+            for chave, valores in series.items() if len(valores) >= 2}

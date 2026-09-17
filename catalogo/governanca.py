@@ -97,10 +97,9 @@ def pre_check(con, id_item: int) -> dict:
     if t.pai and not item["id_pai"]:
         bloqueios.append(f"Hierarquia incompleta: informe o {tipos.tipo(t.pai).rotulo}")
 
-    # ownership
-    papeis = {r["papel"] for r in con.execute(
-        "SELECT papel FROM responsabilidade WHERE id_item = ? "
-        "AND (fim_vigencia IS NULL OR fim_vigencia >= date('now'))", (id_item,))}
+    # ownership (reaproveita a mesma query de "papéis ativos" de qualidade.py
+    # para não dessincronizar a regra do pré-check da pontuação de qualidade)
+    papeis = qualidade._papeis(con, id_item)
     if t.exige_owner_negocial and "owner_negocial" not in papeis:
         bloqueios.append("Owner negocial não definido")
     if t.exige_owner_tecnico and "owner_tecnico" not in papeis:

@@ -63,6 +63,37 @@ a:hover { text-decoration: underline; }
 .cabecalho h1 { font-size: 26px; margin: 0 0 4px; }
 .cabecalho p { margin: 0 0 22px; color: var(--tinta-suave); }
 
+/* ------------------------------------------------- topo: busca e identidade */
+.topo {
+  display: flex; gap: 16px; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+.busca-global { position: relative; flex: 1 1 380px; max-width: 560px; }
+.busca-global input[type=search] { padding-right: 38px; }
+.busca-global kbd {
+  position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+  font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+  color: var(--tinta-suave); background: #eef1f6; border: 1px solid var(--linha);
+  border-radius: 5px; padding: 1px 6px; pointer-events: none;
+}
+.sugestoes {
+  position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; right: 0;
+  list-style: none; margin: 0; padding: 4px;
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 9px; box-shadow: 0 12px 30px -12px rgba(16, 32, 58, .35);
+  max-height: 340px; overflow-y: auto;
+}
+.sugestoes a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--tinta); }
+.sugestoes a:hover, .sugestoes a:focus { background: #f2f6ff; text-decoration: none; }
+.sugestoes .s-nome { display: block; font-size: 14px; font-weight: 600; }
+.sugestoes .s-meta { display: block; font-size: 12px; color: var(--tinta-suave); }
+.identidade { font-size: 13px; color: var(--tinta); white-space: nowrap; }
+
+/* ------------------------------------------------------ trilha hierárquica */
+.trilha { font-size: 13px; color: var(--tinta-suave); margin-bottom: 12px; line-height: 1.9; }
+.trilha .sep { margin: 0 7px; color: var(--linha-forte, #b9c3d4); }
+.trilha .atual { color: var(--tinta); font-weight: 600; }
+
 /* ---------------------------------------------------------------- blocos */
 .cartao {
   background: var(--superficie);
@@ -90,6 +121,30 @@ a:hover { text-decoration: underline; }
 .kpi .valor.risco { color: var(--risco); }
 .kpi .valor.alerta { color: var(--alerta); }
 .kpi .valor.bom { color: var(--sucesso); }
+
+/* KPI clicável: cada número leva ao recorte que ele resume. */
+a.kpi { display: block; color: var(--tinta); transition: border-color .12s, box-shadow .12s; }
+a.kpi:hover {
+  text-decoration: none; border-color: var(--marca);
+  box-shadow: 0 6px 18px -12px rgba(26, 86, 196, .7);
+}
+a.kpi:hover .rotulo { color: var(--marca); }
+.kpi .delta { font-size: 11.5px; margin-top: 2px; color: var(--tinta-suave); }
+.kpi .delta.bom { color: var(--sucesso); }
+.kpi .delta.ruim { color: var(--alerta); }
+
+/* ---------------------------------------------------- chips de filtro ativo */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.chip {
+  display: inline-flex; gap: 6px; align-items: center;
+  font-size: 12.5px; padding: 3px 10px; border-radius: 999px;
+  background: #eef3ff; border: 1px solid #ccdcfb; color: var(--marca);
+}
+.chip:hover { text-decoration: none; background: #e0eaff; }
+.chip strong { font-weight: 600; }
+.chip.limpar { background: transparent; border-style: dashed; border-color: var(--linha); color: var(--tinta-suave); }
+/* os botões do formulário de filtros ocupam a própria linha, abaixo dos campos */
+.filtros .campo.acoes { grid-column: 1 / -1; margin-bottom: 0; }
 
 /* --------------------------------------------------------------- tabelas */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -201,6 +256,9 @@ button:hover, .botao:hover { filter: brightness(1.07); text-decoration: none; }
   .menu a { padding: 6px 10px; }
   .conteudo { padding: 18px 14px 40px; }
   .grade.duas { grid-template-columns: 1fr; }
+  .topo { flex-direction: column; align-items: stretch; }
+  .busca-global { max-width: none; }
+  .identidade { text-align: right; }
 }
 
 @media (prefers-reduced-motion: reduce) {

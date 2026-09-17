@@ -28,6 +28,8 @@
         <input type="hidden" name="tipo_item" value="{{ tipo_item }}">
         <input type="hidden" name="acao" value="salvar">
 
+        {# Todo campo é repovoado a partir do que a pessoa enviou: um erro de
+           regra de negócio não pode custar o formulário inteiro. #}
         <div class="campo">
           <label for="nome">Nome do ativo</label>
           <input type="text" id="nome" name="nome" required value="{{ form.nome or '' }}">
@@ -45,7 +47,7 @@
             <select id="id_pai" name="id_pai" required>
               <option value="">Selecione</option>
               {% for p in pais %}
-                <option value="{{ p.id_item }}">{{ p.nome }} ({{ p.codigo }})</option>
+                <option value="{{ p.id_item }}" {{ 'selected' if valores.get('id_pai') == p.id_item|string }}>{{ p.nome }} ({{ p.codigo }})</option>
               {% endfor %}
             </select>
           </div>
@@ -54,14 +56,17 @@
             <label for="id_squad">Squad responsável</label>
             <select id="id_squad" name="id_squad">
               <option value="">Definir depois</option>
-              {% for s in squads %}<option value="{{ s.id_squad }}">{{ s.nome }}</option>{% endfor %}
+              {% for s in squads %}
+                <option value="{{ s.id_squad }}" {{ 'selected' if valores.get('id_squad') == s.id_squad|string }}>{{ s.nome }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="campo">
             <label for="criticidade">Criticidade</label>
             <select id="criticidade" name="criticidade">
+              {% set crit = valores.get('criticidade') or 'media' %}
               {% for c in CRITICIDADES %}
-                <option value="{{ c }}" {{ 'selected' if c == 'media' }}>{{ c }}</option>
+                <option value="{{ c }}" {{ 'selected' if c == crit }}>{{ c }}</option>
               {% endfor %}
             </select>
           </div>
@@ -71,19 +76,22 @@
           <h3>Campos de {{ t.rotulo|lower }}</h3>
           <div class="linha-campos">
             {% for c in t.campos %}
+              {% set v = valores.get('attr_' ~ c.nome, '') %}
               <div class="campo">
                 <label for="attr_{{ c.nome }}">{{ c.rotulo }}{{ ' *' if c.obrigatorio }}</label>
                 {% if c.tipo == 'area' %}
-                  <textarea id="attr_{{ c.nome }}" name="attr_{{ c.nome }}"></textarea>
+                  <textarea id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">{{ v }}</textarea>
                 {% elif c.tipo == 'selecao' %}
                   <select id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">
                     <option value="">Selecione</option>
-                    {% for o in c.opcoes %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+                    {% for o in c.opcoes %}
+                      <option value="{{ o }}" {{ 'selected' if v == o }}>{{ o }}</option>
+                    {% endfor %}
                   </select>
                 {% elif c.tipo == 'url' %}
-                  <input type="url" id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">
+                  <input type="url" id="attr_{{ c.nome }}" name="attr_{{ c.nome }}" value="{{ v }}">
                 {% else %}
-                  <input type="text" id="attr_{{ c.nome }}" name="attr_{{ c.nome }}">
+                  <input type="text" id="attr_{{ c.nome }}" name="attr_{{ c.nome }}" value="{{ v }}">
                 {% endif %}
               </div>
             {% endfor %}
@@ -92,7 +100,8 @@
 
         <div class="acoes">
           <button type="submit">Salvar rascunho</button>
-          <a class="botao secundario" href="{{ url_for('web.novo_ativo') }}">Trocar tipo</a>
+          <a class="botao secundario" href="{{ url_for('web.novo_ativo') }}"
+             data-confirmar="Trocar o tipo descarta o que você preencheu. Continuar?">Trocar tipo</a>
         </div>
       </form>
     </div>
@@ -116,5 +125,14 @@
       </ul>
     </div>
   </div>
+
+  <script>
+  // Links marcados com data-confirmar pedem confirmação antes de descartar trabalho.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-confirmar]'), function (a) {
+    a.addEventListener('click', function (e) {
+      if (!window.confirm(a.getAttribute('data-confirmar'))) { e.preventDefault(); }
+    });
+  });
+  </script>
 {% endif %}
 {% endblock %}

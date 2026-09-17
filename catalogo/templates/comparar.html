@@ -2,6 +2,8 @@
 {% block titulo %}Comparar revisões{% endblock %}
 
 {% block conteudo %}
+{% set atual = item['nome'] ~ ' · revisões' %}
+{% include "_trilha.html" with context %}
 <div class="cabecalho">
   <h1>Revisão #{{ a }} vs #{{ b }}</h1>
   <p>{{ item['nome'] }} — <span class="mono">{{ item['codigo'] }}</span></p>

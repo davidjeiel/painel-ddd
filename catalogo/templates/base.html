@@ -8,20 +8,46 @@
 </head>
 <body>
 <div class="aplicacao">
-  <nav class="menu">
+  {#- O destaque é por seção, não por rota exata: abrir um ativo mantém
+      "Catálogo de ativos" marcado, e o leitor de tela recebe aria-current. -#}
+  {%- macro item_menu(endpoint, chave, rotulo) -%}
+    {%- if secao == chave -%}
+      <a href="{{ url_for(endpoint) }}" class="ativo" aria-current="page">{{ rotulo }}</a>
+    {%- else -%}
+      <a href="{{ url_for(endpoint) }}">{{ rotulo }}</a>
+    {%- endif -%}
+  {%- endmacro -%}
+
+  <nav class="menu" aria-label="Navegação principal">
     <div class="marca">CATÁLOGO DDD</div>
-    <a href="{{ url_for('web.dashboard') }}" class="{{ 'ativo' if request.endpoint == 'web.dashboard' }}">Visão executiva</a>
-    <a href="{{ url_for('web.catalogo') }}" class="{{ 'ativo' if request.endpoint == 'web.catalogo' }}">Catálogo de ativos</a>
-    <a href="{{ url_for('web.mapa') }}" class="{{ 'ativo' if request.endpoint == 'web.mapa' }}">Mapa DDD</a>
-    <a href="{{ url_for('web.validacoes') }}" class="{{ 'ativo' if request.endpoint == 'web.validacoes' }}">Validações</a>
+    {{ item_menu('web.dashboard', 'painel', 'Visão executiva') }}
+    {{ item_menu('web.catalogo', 'catalogo', 'Catálogo de ativos') }}
+    {{ item_menu('web.mapa', 'mapa', 'Mapa DDD') }}
+    {{ item_menu('web.validacoes', 'validacoes', 'Validações') }}
     <div class="grupo">Cadastrar</div>
-    <a href="{{ url_for('web.novo_ativo') }}">Novo ativo</a>
+    {{ item_menu('web.novo_ativo', 'novo', 'Novo ativo') }}
     <div class="grupo">Administração</div>
-    <a href="{{ url_for('web.politicas') }}" class="{{ 'ativo' if request.endpoint == 'web.politicas' }}">Políticas</a>
+    {{ item_menu('web.politicas', 'politicas', 'Políticas') }}
     <a href="{{ url_for('api.indicadores') }}">API de indicadores</a>
   </nav>
 
   <main class="conteudo">
+    <div class="topo">
+      <form class="busca-global" method="get" action="{{ url_for('web.catalogo') }}"
+            role="search" autocomplete="off">
+        <input type="search" id="busca-global" name="termo" value="{{ request.args.get('termo', '') }}"
+               placeholder="Buscar ativo por nome, código ou descrição"
+               aria-label="Buscar em todo o catálogo"
+               aria-describedby="busca-atalho" aria-expanded="false"
+               aria-controls="busca-sugestoes" role="combobox">
+        <kbd id="busca-atalho" title="Atalho: barra ou Ctrl+K">/</kbd>
+        <ul id="busca-sugestoes" class="sugestoes" role="listbox" hidden></ul>
+      </form>
+      <div class="identidade" title="Ativos publicados por você são assinados com este usuário">
+        <span class="discreto">Você é</span> <strong>{{ usuario }}</strong>
+      </div>
+    </div>
+
     {% with mensagens = get_flashed_messages(with_categories=true) %}
       {% for categoria, texto in mensagens %}
         <div class="aviso {{ categoria }}">{{ texto }}</div>
@@ -30,5 +56,78 @@
     {% block conteudo %}{% endblock %}
   </main>
 </div>
+
+<script>
+(function () {
+  var campo = document.getElementById('busca-global');
+  var lista = document.getElementById('busca-sugestoes');
+  if (!campo || !lista) { return; }
+  var atraso = null;
+
+  function fechar() {
+    lista.hidden = true;
+    lista.innerHTML = '';
+    campo.setAttribute('aria-expanded', 'false');
+  }
+
+  function desenhar(itens) {
+    if (!itens.length) { fechar(); return; }
+    lista.innerHTML = itens.map(function (i) {
+      return '<li role="option"><a href="' + i.url + '"><span class="s-nome"></span>' +
+             '<span class="s-meta"></span></a></li>';
+    }).join('');
+    // texto inserido por textContent para não confiar em HTML vindo do servidor
+    Array.prototype.forEach.call(lista.querySelectorAll('li'), function (li, n) {
+      li.querySelector('.s-nome').textContent = itens[n].nome;
+      li.querySelector('.s-meta').textContent = itens[n].tipo + ' · ' + itens[n].codigo +
+                                                ' · ' + itens[n].status;
+    });
+    lista.hidden = false;
+    campo.setAttribute('aria-expanded', 'true');
+  }
+
+  campo.addEventListener('input', function () {
+    window.clearTimeout(atraso);
+    var termo = campo.value.trim();
+    if (termo.length < 2) { fechar(); return; }
+    atraso = window.setTimeout(function () {
+      fetch('{{ url_for("web.sugestoes") }}?termo=' + encodeURIComponent(termo))
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (campo.value.trim() === d.termo) { desenhar(d.itens); } })
+        .catch(fechar);
+    }, 180);
+  });
+
+  campo.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { fechar(); campo.blur(); }
+    if (e.key === 'ArrowDown' && !lista.hidden) {
+      e.preventDefault();
+      var primeiro = lista.querySelector('a');
+      if (primeiro) { primeiro.focus(); }
+    }
+  });
+
+  lista.addEventListener('keydown', function (e) {
+    var links = Array.prototype.slice.call(lista.querySelectorAll('a'));
+    var i = links.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (links[i + 1] || campo).focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); (links[i - 1] || campo).focus(); }
+    if (e.key === 'Escape') { fechar(); campo.focus(); }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!lista.contains(e.target) && e.target !== campo) { fechar(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var digitando = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if ((e.key === '/' && !digitando) || (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey))) {
+      e.preventDefault();
+      campo.focus();
+      campo.select();
+    }
+  });
+})();
+</script>
 </body>
 </html>
