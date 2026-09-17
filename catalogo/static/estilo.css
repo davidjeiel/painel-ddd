@@ -3,13 +3,33 @@
   --tinta-suave: #5b6b83;
   --papel: #f3f5f9;
   --superficie: #ffffff;
+  --superficie-suave: #f8faff;
   --linha: #dfe5ee;
+  --linha-forte: #b9c3d4;
   --marca: #1a56c4;
   --sucesso: #0e8a5f;
   --alerta: #c2410c;
   --risco: #b42318;
   --menu: #14243f;
   --raio: 10px;
+  color-scheme: light;
+}
+
+/* --------------------------------------------------------- versão noturna */
+:root[data-tema="escuro"] {
+  --tinta: #e7ecf6;
+  --tinta-suave: #96a5c2;
+  --papel: #0b1220;
+  --superficie: #131d31;
+  --superficie-suave: #182842;
+  --linha: #253453;
+  --linha-forte: #34476e;
+  --marca: #6ea1ff;
+  --sucesso: #3fcf94;
+  --alerta: #f0a35a;
+  --risco: #f2776a;
+  --menu: #060c18;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -36,6 +56,9 @@ a:hover { text-decoration: underline; }
   background: var(--menu);
   color: #cbd7ea;
   padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  transition: width .15s ease, flex-basis .15s ease;
 }
 .menu .marca {
   color: #fff;
@@ -44,8 +67,11 @@ a:hover { text-decoration: underline; }
   padding: 0 20px 18px;
   font-size: 15px;
 }
+.menu .marca-curta { display: none; text-align: center; }
 .menu a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 9px 20px;
   color: #b9c7dd;
   font-size: 14px;
@@ -58,6 +84,52 @@ a:hover { text-decoration: underline; }
   letter-spacing: .08em;
   color: #7d90ad;
 }
+.icone-menu {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  background: rgba(255,255,255,.08);
+  color: #9fb3d1;
+}
+.menu a.ativo .icone-menu { background: #5b9dff; color: #0d1830; }
+
+/* --------------------------------------------------- comprimir menu lateral */
+.alternar-menu {
+  margin: 16px 20px 0;
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b9c7dd;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.alternar-menu:hover { background: rgba(255,255,255,.07); color: #fff; }
+.alternar-menu .seta { font-size: 12px; transition: transform .15s ease; }
+
+html.menu-comprimido .menu { width: 76px; flex-basis: 76px; }
+html.menu-comprimido .menu .marca { padding: 0 0 18px; text-align: center; }
+html.menu-comprimido .menu .marca-cheia { display: none; }
+html.menu-comprimido .menu .marca-curta { display: block; }
+html.menu-comprimido .menu .grupo { display: none; }
+html.menu-comprimido .menu a { justify-content: center; padding: 10px 0; }
+html.menu-comprimido .menu .rotulo-menu { display: none; }
+html.menu-comprimido .alternar-menu { margin: 16px 12px 0; padding: 9px; }
+html.menu-comprimido .alternar-menu .seta { transform: rotate(180deg); }
 
 .conteudo { flex: 1; padding: 26px 30px 60px; max-width: 1240px; }
 .cabecalho h1 { font-size: 26px; margin: 0 0 4px; }
@@ -73,9 +145,10 @@ a:hover { text-decoration: underline; }
 .busca-global kbd {
   position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
   font-family: ui-monospace, Menlo, monospace; font-size: 11px;
-  color: var(--tinta-suave); background: #eef1f6; border: 1px solid var(--linha);
+  color: var(--tinta-suave); background: var(--superficie-suave); border: 1px solid var(--linha);
   border-radius: 5px; padding: 1px 6px; pointer-events: none;
 }
+.tema-alternar { flex: 0 0 auto; white-space: nowrap; }
 .sugestoes {
   position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; right: 0;
   list-style: none; margin: 0; padding: 4px;
@@ -84,7 +157,7 @@ a:hover { text-decoration: underline; }
   max-height: 340px; overflow-y: auto;
 }
 .sugestoes a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--tinta); }
-.sugestoes a:hover, .sugestoes a:focus { background: #f2f6ff; text-decoration: none; }
+.sugestoes a:hover, .sugestoes a:focus { background: var(--superficie-suave); text-decoration: none; }
 .sugestoes .s-nome { display: block; font-size: 14px; font-weight: 600; }
 .sugestoes .s-meta { display: block; font-size: 12px; color: var(--tinta-suave); }
 .identidade { font-size: 13px; color: var(--tinta); white-space: nowrap; }
@@ -158,9 +231,9 @@ th {
   padding: 8px 10px;
   border-bottom: 1px solid var(--linha);
 }
-td { padding: 10px; border-bottom: 1px solid #eef1f6; vertical-align: top; }
+td { padding: 10px; border-bottom: 1px solid var(--superficie-suave); vertical-align: top; }
 tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: #f8faff; }
+tbody tr:hover { background: var(--superficie-suave); }
 
 /* ------------------------------------------------------------ etiquetas */
 .etiqueta {
@@ -195,10 +268,10 @@ label { display: block; font-size: 12.5px; color: var(--tinta-suave); margin-bot
 input[type=text], input[type=url], input[type=search], select, textarea {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #cdd6e4;
+  border: 1px solid var(--linha-forte);
   border-radius: 7px;
   font: inherit;
-  background: #fff;
+  background: var(--superficie);
   color: var(--tinta);
 }
 textarea { min-height: 84px; resize: vertical; }
@@ -217,7 +290,7 @@ button, .botao {
 }
 button:hover, .botao:hover { filter: brightness(1.07); text-decoration: none; }
 .botao.secundario, button.secundario {
-  background: #fff; color: var(--marca);
+  background: var(--superficie); color: var(--marca);
 }
 .botao.perigo, button.perigo { background: #fff; color: var(--risco); border-color: #e3b5b0; }
 .botao.aprovar, button.aprovar { background: var(--sucesso); border-color: var(--sucesso); }
@@ -363,11 +436,55 @@ details.impacto li { padding: 2px 0; }
 .grafico .linha.secundaria { stroke: #7a4dd6; }
 .grafico .eixo { stroke: var(--linha); stroke-width: 1; }
 
+/* ----------------------------------------------- versão noturna: crachás e faixas
+   claros demais para flutuar sobre um fundo escuro ganham uma variante mais escura;
+   o resto da tela já se adapta sozinho pelas variáveis do :root. */
+:root[data-tema="escuro"] .etiqueta { background: var(--superficie-suave); }
+:root[data-tema="escuro"] .etiqueta.publicado {
+  background: #123526; color: #7fe4b3; border-color: #1e5b3f;
+}
+:root[data-tema="escuro"] .etiqueta.em_validacao {
+  background: #3a2712; color: #f2b46b; border-color: #5c3f1c;
+}
+:root[data-tema="escuro"] .etiqueta.em_revisao {
+  background: #16233f; color: #8fb4ff; border-color: #28406e;
+}
+:root[data-tema="escuro"] .etiqueta.descontinuado,
+:root[data-tema="escuro"] .etiqueta.arquivado {
+  background: #3a1f1c; color: #f0958a;
+}
+:root[data-tema="escuro"] .etiqueta.critica {
+  background: #3a1e1a; border-color: #5c332c;
+}
+:root[data-tema="escuro"] .etiqueta.alta {
+  background: #3a2712; border-color: #5c3f1c;
+}
+:root[data-tema="escuro"] .barra { background: var(--superficie-suave); }
+:root[data-tema="escuro"] .chip {
+  background: #182a4d; border-color: #2c4470;
+}
+:root[data-tema="escuro"] .aviso.ok { background: #123526; color: #7fe4b3; }
+:root[data-tema="escuro"] .aviso.erro { background: #3a1f1c; color: #f0958a; }
+:root[data-tema="escuro"] .progresso { background: #3a2712; }
+:root[data-tema="escuro"] .progresso.completo { background: #123526; }
+:root[data-tema="escuro"] .passos > li.ok::before { background: #123526; }
+:root[data-tema="escuro"] .passos > li.pendente::before { background: #3a2712; }
+:root[data-tema="escuro"] .linha-vencida td { background: #241a1a; }
+:root[data-tema="escuro"] .linha-atual td { background: #16233f; }
+:root[data-tema="escuro"] .linha-nova td { background: #12241d; }
+
 @media (max-width: 860px) {
   .aplicacao { flex-direction: column; }
-  .menu { width: 100%; flex: none; display: flex; flex-wrap: wrap; padding: 10px; }
+  .menu, html.menu-comprimido .menu { width: 100%; flex: none; flex-direction: row; flex-wrap: wrap; padding: 10px; }
   .menu .marca, .menu .grupo { width: 100%; padding: 6px 10px; }
+  html.menu-comprimido .menu .marca { text-align: left; }
+  html.menu-comprimido .menu .marca-cheia { display: block; }
+  html.menu-comprimido .menu .marca-curta { display: none; }
+  .menu .grupo, html.menu-comprimido .menu .grupo { display: block; }
   .menu a { padding: 6px 10px; }
+  html.menu-comprimido .menu a { justify-content: flex-start; padding: 6px 10px; }
+  .rotulo-menu, html.menu-comprimido .rotulo-menu { display: inline; }
+  .alternar-menu { display: none; }
   .conteudo { padding: 18px 14px 40px; }
   .grade.duas { grid-template-columns: 1fr; }
   .topo { flex-direction: column; align-items: stretch; }

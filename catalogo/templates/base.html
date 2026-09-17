@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Catálogo Corporativo DDD{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+  <script>
+  (function () {
+    // aplicado antes da pintura para não piscar o tema/menu errado por um instante
+    try {
+      if (localStorage.getItem('menuComprimido') === '1') {
+        document.documentElement.classList.add('menu-comprimido');
+      }
+      var tema = localStorage.getItem('tema');
+      if (!tema) { tema = matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'; }
+      if (tema === 'escuro') { document.documentElement.dataset.tema = 'escuro'; }
+    } catch (e) {}
+  })();
+  </script>
 </head>
 <body>
 <div class="aplicacao">
@@ -12,14 +25,17 @@
       "Catálogo de ativos" marcado, e o leitor de tela recebe aria-current. -#}
   {%- macro item_menu(endpoint, chave, rotulo) -%}
     {%- if secao == chave -%}
-      <a href="{{ url_for(endpoint) }}" class="ativo" aria-current="page">{{ rotulo }}</a>
+      <a href="{{ url_for(endpoint) }}" class="ativo" aria-current="page" title="{{ rotulo }}"><span class="icone-menu" aria-hidden="true">{{ rotulo[:2] }}</span><span class="rotulo-menu">{{ rotulo }}</span></a>
     {%- else -%}
-      <a href="{{ url_for(endpoint) }}">{{ rotulo }}</a>
+      <a href="{{ url_for(endpoint) }}" title="{{ rotulo }}"><span class="icone-menu" aria-hidden="true">{{ rotulo[:2] }}</span><span class="rotulo-menu">{{ rotulo }}</span></a>
     {%- endif -%}
   {%- endmacro -%}
 
-  <nav class="menu" aria-label="Navegação principal">
-    <div class="marca">CATÁLOGO DDD</div>
+  <nav class="menu" id="menu-principal" aria-label="Navegação principal">
+    <div class="marca">
+      <span class="marca-cheia">CATÁLOGO DDD</span>
+      <span class="marca-curta" aria-hidden="true">DDD</span>
+    </div>
     {{ item_menu('web.dashboard', 'painel', 'Visão executiva') }}
     {{ item_menu('web.catalogo', 'catalogo', 'Catálogo de ativos') }}
     {{ item_menu('web.mapa', 'mapa', 'Mapas') }}
@@ -30,7 +46,11 @@
     {{ item_menu('web.validacoes', 'validacoes', 'Validações') }}
     <div class="grupo">Administração</div>
     {{ item_menu('web.politicas', 'politicas', 'Políticas') }}
-    <a href="{{ url_for('api.indicadores') }}">API de indicadores</a>
+    <a href="{{ url_for('api.indicadores') }}" title="API de indicadores"><span class="icone-menu" aria-hidden="true">AP</span><span class="rotulo-menu">API de indicadores</span></a>
+    <button type="button" id="btn-comprimir-menu" class="alternar-menu"
+            aria-pressed="false" aria-controls="menu-principal">
+      <span class="seta" aria-hidden="true">«</span><span class="rotulo-menu">Comprimir menu</span>
+    </button>
   </nav>
 
   <main class="conteudo">
@@ -45,6 +65,9 @@
         <kbd id="busca-atalho" title="Atalho: barra ou Ctrl+K">/</kbd>
         <ul id="busca-sugestoes" class="sugestoes" role="listbox" hidden></ul>
       </form>
+      <button type="button" id="btn-tema" class="botao secundario tema-alternar" aria-pressed="false">
+        Modo noturno
+      </button>
       <div class="identidade" title="Ativos publicados por você são assinados com este usuário">
         <span class="discreto">Você é</span> <strong>{{ usuario }}</strong>
       </div>
@@ -60,6 +83,41 @@
 </div>
 
 <script>
+(function () {
+  var raiz = document.documentElement;
+
+  var btnMenu = document.getElementById('btn-comprimir-menu');
+  function aplicarMenu(comprimido) {
+    raiz.classList.toggle('menu-comprimido', comprimido);
+    if (btnMenu) { btnMenu.setAttribute('aria-pressed', comprimido ? 'true' : 'false'); }
+  }
+  aplicarMenu(raiz.classList.contains('menu-comprimido'));
+  if (btnMenu) {
+    btnMenu.addEventListener('click', function () {
+      var comprimido = !raiz.classList.contains('menu-comprimido');
+      aplicarMenu(comprimido);
+      try { localStorage.setItem('menuComprimido', comprimido ? '1' : '0'); } catch (e) {}
+    });
+  }
+
+  var btnTema = document.getElementById('btn-tema');
+  function aplicarTema(escuro) {
+    if (escuro) { raiz.dataset.tema = 'escuro'; } else { delete raiz.dataset.tema; }
+    if (btnTema) {
+      btnTema.setAttribute('aria-pressed', escuro ? 'true' : 'false');
+      btnTema.textContent = escuro ? 'Modo claro' : 'Modo noturno';
+    }
+  }
+  aplicarTema(raiz.dataset.tema === 'escuro');
+  if (btnTema) {
+    btnTema.addEventListener('click', function () {
+      var escuro = raiz.dataset.tema !== 'escuro';
+      aplicarTema(escuro);
+      try { localStorage.setItem('tema', escuro ? 'escuro' : 'claro'); } catch (e) {}
+    });
+  }
+})();
+
 (function () {
   var campo = document.getElementById('busca-global');
   var lista = document.getElementById('busca-sugestoes');
