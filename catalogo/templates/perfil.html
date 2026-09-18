@@ -35,9 +35,10 @@
         <button type="submit">Salvar perfil</button>
       </form>
       <p class="discreto" style="margin-top:14px">
-        Enquanto a fonte de identidade corporativa não é decidida, a pessoa é escolhida
-        aqui. Quando o SSO entrar, esta tela perde o seletor e mantém o resto — papéis,
-        escopos e regras não mudam.
+        Não está na lista? <a href="{{ url_for('web.solicitar_acesso') }}">Cadastre-se e
+        pleiteie um papel</a>. Enquanto a fonte de identidade corporativa não é decidida,
+        a pessoa é escolhida aqui; quando o SSO entrar, esta tela perde o seletor e
+        mantém o resto — papéis, escopos e regras não mudam.
       </p>
     </div>
 
@@ -78,22 +79,58 @@
         <p class="vazio">Identifique-se ao lado para ver os papéis atribuídos a você.</p>
       {% elif papeis %}
         <table>
-          <thead><tr><th scope="col">Papel</th><th scope="col">Escopo</th>
-                     <th scope="col">Desde</th></tr></thead>
+          <thead><tr><th scope="col">Papel</th><th scope="col">Vale em</th>
+                     <th scope="col">Escreve em</th><th scope="col">Desde</th></tr></thead>
           <tbody>
-          {% for p in papeis %}
+          {% for p in papeis_com_escopo %}
             <tr><td><strong>{{ catalogo_papeis.get(p.papel, p.papel) }}</strong></td>
-                <td class="discreto">{{ p.escopo_tipo }}{{ ' #' ~ p.escopo_id if p.escopo_id }}</td>
+                <td class="discreto">{{ p.escopo_rotulo }}</td>
+                <td class="discreto">{{ p.blocos|join(' e ') if p.blocos else 'nada — só consulta' }}</td>
                 <td class="discreto">{{ p.inicio_vigencia }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       {% else %}
-        <p class="vazio">Nenhum papel atribuído: você consegue consultar o catálogo, mas
-          não escrever nele. Um administrador concede papéis por
-          <span class="mono">flask --app catalogo conceder &lt;login&gt; &lt;papel&gt;</span>.</p>
+        <p class="vazio">Nenhum papel atribuído: você consulta o catálogo inteiro, mas
+          não escreve nele.
+          <a href="{{ url_for('web.solicitar_acesso') }}">Pleiteie um papel</a> — quem
+          concede é um curador ou administrador.</p>
+      {% endif %}
+      {% if pessoa %}
+        <p class="discreto">
+          <a href="{{ url_for('web.solicitar_acesso') }}">Pleitear outro papel</a> —
+          o pedido novo não apaga os papéis que você já tem.
+        </p>
       {% endif %}
     </div>
+
+    {% if meus_pleitos %}
+      <div class="cartao">
+        <h2>Seus pleitos</h2>
+        {% for p in meus_pleitos %}
+          <div class="pleito-linha">
+            <p>
+              <strong>{{ catalogo_papeis.get(p.papel_pleiteado, p.papel_pleiteado) }}</strong>
+              <span class="etiqueta {{ 'em_validacao' if p.status == 'pendente' else ('publicado' if p.status == 'aprovada' else 'descontinuado') }}">
+                {{ {'pendente': 'aguardando decisão', 'aprovada': 'aprovado', 'negada': 'negado'}[p.status] }}
+              </span>
+              <span class="discreto">pedido em {{ p.criado_em }}</span>
+            </p>
+            {% if p.status != 'pendente' %}
+              {% if p.papel_concedido %}
+                <p class="discreto">Concedido: <strong>{{ catalogo_papeis.get(p.papel_concedido, p.papel_concedido) }}</strong>
+                  em {{ p.escopo_rotulo }}{{ ' — diferente do pleiteado.' if p.papel_concedido != p.papel_pleiteado }}</p>
+              {% endif %}
+              {% if p.resposta %}<p class="regra">{{ p.resposta }}</p>{% endif %}
+              <p class="discreto mono">{{ p.decidido_por }} · {{ p.decidido_em }}</p>
+            {% else %}
+              <p class="discreto">Na fila de um curador ou administrador. Você recebe a
+                resposta pelo sino.</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
     <div class="cartao">
       <h2>Modo atual</h2>

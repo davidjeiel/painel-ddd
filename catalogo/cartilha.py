@@ -40,22 +40,35 @@ ACOES_ROTULO = {
     "importar": "Importar descobertas",
     "triar": "Triar a bandeja",
     "descontinuar": "Descontinuar ativo",
-    "administrar": "Conceder papéis",
+    "conceder": "Conceder papéis",
+    "administrar": "Administrar a ferramenta",
 }
 
 PRIMEIROS_PASSOS = [
     {
+        "titulo": "Cadastre-se e pleiteie um papel",
+        "texto": (
+            "Em <strong>Seu perfil › Cadastre-se e pleiteie um papel</strong> você "
+            "informa matrícula (uma letra e seis números, como C123456), nome, e-mail, "
+            "unidade (quatro números) e o papel que pretende exercer. O cadastro entra "
+            "na hora; o <strong>papel não</strong>."),
+        "extra": (
+            "Quem concede é outra pessoa — um curador ou um administrador — que pode "
+            "conceder o papel pedido, conceder outro ou negar, sempre com uma resposta "
+            "escrita. Ela chega no sino e fica em Seu perfil. Até lá, você consulta o "
+            "catálogo inteiro e não escreve em nada."),
+    },
+    {
         "titulo": "Diga quem você é",
         "texto": (
-            "Abra <strong>Seu perfil</strong> no menu e escolha o seu nome. Isso não é "
-            "formalidade: é esse nome que assina as publicações que você fizer, e cada "
-            "publicação gera um registro imutável com hash e trilha de auditoria. "
+            "Identificado, é o seu nome que assina as publicações que você fizer, e "
+            "cada publicação gera um registro imutável com hash e trilha de auditoria. "
             "Enquanto você não se identificar, a ferramenta recusa qualquer escrita e "
-            "te manda de volta para essa tela."),
+            "te manda de volta para o perfil."),
         "extra": (
-            "Na mesma tela você vê <strong>seus papéis</strong>. Se a lista estiver "
-            "vazia, você consegue consultar o catálogo mas não escrever nele — peça a "
-            "um administrador."),
+            "Na mesma tela você vê <strong>seus papéis</strong> e o andamento dos seus "
+            "pleitos. Precisa de mais do que tem? Pleiteie outro papel — o pedido novo "
+            "não apaga os que você já tem."),
     },
     {
         "titulo": "Escolha o modo de trabalho",
@@ -79,6 +92,11 @@ PRIMEIROS_PASSOS = [
 ]
 
 REGRAS = [
+    ("O papel autoriza a ação e o objeto",
+     "Quem responde pelo negócio escreve na Estrutura DDD — domínio, subdomínio, "
+     "contexto, capacidade. Quem responde pela técnica escreve nos ativos técnicos. "
+     "Arquiteto, curador e admin atravessam os dois. Fora do seu bloco, o catálogo é "
+     "consulta, e a rota recusa mesmo que você chegue nela pelo endereço."),
     ("Quem submete não aprova",
      "Se você enviou uma revisão para validação, a ferramenta não deixa você mesmo "
      "decidir sobre ela — nem se o seu papel permitir aquela etapa. É segregação de "
@@ -110,6 +128,9 @@ PERFIS = [
              "quem implementa o quê é informação técnica: peça ao tech lead"),
             ("Importar descobertas e triar a bandeja", "é o caminho do time técnico"),
             ("Descontinuar um ativo publicado", "fica com curador, arquiteto ou admin"),
+            ("Cadastrar ou editar ativo técnico",
+             "sistema, aplicação, API, endpoint e base de dados são do outro bloco: "
+             "para você eles são consulta"),
         ],
         "rotina_titulo": "Sua rotina",
         "rotina": [
@@ -153,6 +174,9 @@ PERFIS = [
              "a saída de uso passa por curador, arquiteto ou admin"),
             ("Decidir etapas negocial e arquitetural",
              "a menos que você seja o responsável formal daquele ativo"),
+            ("Cadastrar ou editar a hierarquia de negócio",
+             "domínio, subdomínio, contexto e capacidade são do bloco de negócio: "
+             "para você eles são consulta"),
         ],
         "rotina_titulo": "Sua rotina: trazer um sistema inteiro para o catálogo",
         "rotina": [
@@ -238,11 +262,15 @@ PERFIS = [
             "Importar descobertas e triar a bandeja",
             "Enviar para validação e abrir revisão",
             "Descontinuar ativos que saem de uso",
+            "<strong>Conceder papéis</strong> pleiteados, com o alcance que decidir",
         ],
         "recusa": [
             ("Decidir validações",
              "por desenho: quem cuida do cadastro não é quem o aprova. Você prepara, "
              "outra pessoa valida"),
+            ("Conceder o papel de administrador",
+             "só um administrador cria outro; sem esse teto, administrar a ferramenta "
+             "se espalharia por concessão lateral"),
         ],
         "rotina_titulo": "Sua rotina: caçar o que está apodrecendo",
         "rotina": [
@@ -260,6 +288,10 @@ PERFIS = [
              "primeiro. Abra cada um e siga o <strong>caminho até a publicação</strong> "
              "— cinco passos, e cada um leva à aba que resolve a pendência.", ""),
             ("Complete, submeta, e deixe a validação com quem valida.", ""),
+            ("Antes de sair, passe em <strong>Pleitos de acesso</strong>: cada pleito "
+             "parado é alguém que não consegue trabalhar. Conceda o papel pedido, "
+             "conceda um menor ou negue — mas responda.",
+             "Menu › Administração › Pleitos de acesso"),
         ],
         "nota": (
             "<strong>Você não decide validação, e isso é de propósito.</strong> Se a "
@@ -288,12 +320,16 @@ PERFIS = [
         ],
         "rotina_titulo": "Sua rotina: conceder papel e manter o relógio andando",
         "rotina": [
-            ("Conceda papéis pela linha de comando, no servidor: "
-             "<code>flask --app catalogo conceder ana.torres negocio</code> para papel "
-             "global, ou <code>--dominio 3</code> para restringir a um domínio.", ""),
+            ("Despache os pleitos em <strong>Pleitos de acesso</strong>: escolha o papel, "
+             "o alcance (global, um domínio ou uma squad) e escreva a resposta. Só você "
+             "concede o papel de administrador.",
+             "Menu › Administração › Pleitos de acesso"),
             ("Prefira o escopo por domínio: a pessoa decide no que conhece. A ferramenta "
              "resolve o domínio de qualquer ativo subindo a hierarquia, então o papel "
              "vale para os endpoints abaixo dele.", ""),
+            ("Fora da tela, a linha de comando faz o mesmo: "
+             "<code>flask --app catalogo conceder ana.torres negocio --dominio 3</code> "
+             "— útil para semear o primeiro administrador de um ambiente novo.", ""),
             ("Agende <code>vigiar-sla</code> de hora em hora: é ele que gera os avisos "
              "de prazo vencendo e vencido.", ""),
             ("Agende <code>notificar</code> logo depois: despacha a fila de envio. "
@@ -345,10 +381,18 @@ PERFIS = [
 
 DUVIDAS = [
     ("O botão que eu usava sumiu",
-     "Três causas, nesta ordem: você está em <strong>modo de leitura</strong> (troque em "
-     "Seu perfil); o seu <strong>papel</strong> não permite aquela ação (veja a matriz "
-     "acima); ou o ativo está <strong>publicado</strong> e precisa de uma revisão aberta "
-     "antes de aceitar mudanças."),
+     "Quatro causas, nesta ordem: você está em <strong>modo de leitura</strong> (troque "
+     "em Seu perfil); o seu <strong>papel</strong> não permite aquela ação (veja a matriz "
+     "acima); o ativo é de um <strong>bloco que o seu papel não escreve</strong> — "
+     "negócio não mexe em ativo técnico e vice-versa; ou o ativo está "
+     "<strong>publicado</strong> e precisa de uma revisão aberta antes de aceitar "
+     "mudanças."),
+    ("Pedi um papel e não recebi nada",
+     "O pleito fica em <strong>Seu perfil</strong> com o estado dele. Pendente significa "
+     "que ninguém despachou ainda — um curador ou administrador precisa decidir, e você "
+     "será avisado pelo sino. Negado ou concedido com papel menor, a resposta de quem "
+     "decidiu está ali, escrita. Pleito sem justificativa costuma voltar com papel menor "
+     "do que o pedido: diga o que você vai cadastrar ou decidir."),
     ("Não consigo aprovar esta validação",
      "Ou a <strong>etapa exige um papel</strong> que você não tem — a mensagem diz "
      "qual —, ou <strong>você submeteu</strong> essa revisão. No segundo caso não há o "

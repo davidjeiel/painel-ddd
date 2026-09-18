@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastro e pleito de acesso{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Cadastro e pleito de acesso</h1>
+  <p>Informe quem você é e que papel pretende exercer. Quem concede o papel é outra
+     pessoa — curador ou administrador — e você recebe a resposta pelo sino.</p>
+</div>
+
+<div class="grade duas">
+  <div class="cartao">
+    <h2>Seus dados</h2>
+    <form method="post">
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="matricula">Matrícula</label>
+          <input type="text" id="matricula" name="matricula" required
+                 maxlength="7" minlength="7" pattern="[A-Za-z][0-9]{6}"
+                 placeholder="C123456" autocomplete="off"
+                 value="{{ form.get('matricula', '') }}"
+                 aria-describedby="ajuda-matricula">
+          <p class="discreto" id="ajuda-matricula">Uma letra — normalmente C, E, F ou
+            P — seguida de seis números.</p>
+        </div>
+        <div class="campo">
+          <label for="unidade">Unidade</label>
+          <input type="text" id="unidade" name="unidade" required
+                 maxlength="4" minlength="4" pattern="[0-9]{4}" inputmode="numeric"
+                 placeholder="0427" value="{{ form.get('unidade', '') }}"
+                 aria-describedby="ajuda-unidade">
+          <p class="discreto" id="ajuda-unidade">Código de quatro números.</p>
+        </div>
+      </div>
+      <div class="campo">
+        <label for="nome">Nome completo</label>
+        <input type="text" id="nome" name="nome" required
+               value="{{ form.get('nome', '') }}">
+      </div>
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input type="text" id="email" name="email" required
+               value="{{ form.get('email', '') }}">
+      </div>
+
+      <div class="campo">
+        <label for="papel_pleiteado">Papel pleiteado</label>
+        <select id="papel_pleiteado" name="papel_pleiteado" required>
+          <option value="">Escolha o papel</option>
+          {% for chave, rotulo in papeis.items() %}
+            <option value="{{ chave }}" {{ 'selected' if form.get('papel_pleiteado') == chave }}>{{ rotulo }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="justificativa">Por que você precisa dele</label>
+        <textarea id="justificativa" name="justificativa"
+                  placeholder="O que você vai cadastrar ou decidir, e em que domínio."
+                  >{{ form.get('justificativa', '') }}</textarea>
+        <p class="discreto">Quem despacha o pleito lê isto. Um pedido sem contexto
+           costuma voltar com papel menor do que o pleiteado.</p>
+      </div>
+
+      <div class="acoes">
+        <button type="submit">Enviar pleito</button>
+        <a class="botao secundario" href="{{ url_for('web.perfil') }}">Voltar ao perfil</a>
+      </div>
+    </form>
+  </div>
+
+  <div>
+    <div class="cartao">
+      <h2>O que cada papel exerce</h2>
+      <table>
+        <thead><tr><th scope="col">Papel</th><th scope="col">Escreve em</th></tr></thead>
+        <tbody>
+          {% for chave, rotulo in papeis.items() %}
+            <tr><td><strong>{{ rotulo }}</strong></td>
+                <td class="discreto">
+                  {%- set alcance = blocos_por_papel.get(chave) -%}
+                  {{ alcance|sort|join(' e ') if alcance else 'nada — só consulta' }}
+                </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="discreto">A <a href="{{ url_for('web.cartilha') }}">cartilha</a> detalha a
+         rotina de cada papel e a matriz completa de permissões.</p>
+    </div>
+
+    <div class="cartao">
+      <h2>O que acontece depois</h2>
+      <ol class="rotina">
+        <li>O cadastro entra na hora e você já <strong>consulta</strong> o catálogo
+          inteiro — nada de escrita ainda.</li>
+        <li>O pleito vai para a fila de um curador ou administrador, que pode
+          <strong>conceder o papel pedido, conceder outro ou negar</strong>, sempre com
+          uma resposta escrita.</li>
+        <li>A resposta chega no sino e fica em <strong>Seu perfil</strong>. Concedido o
+          papel, as ações dele aparecem na tela na mesma sessão.</li>
+      </ol>
+      <p class="nota">Enquanto o pleito estiver pendente, um novo cadastro com a mesma
+        matrícula atualiza seus dados, mas não cria um segundo pedido.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

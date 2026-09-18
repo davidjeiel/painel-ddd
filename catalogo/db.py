@@ -37,6 +37,7 @@ MIGRACOES = [
     ("pessoa", "login", "TEXT"),
     ("pessoa", "identidade_externa", "TEXT"),
     ("pessoa", "origem_identidade", "TEXT NOT NULL DEFAULT 'local'"),
+    ("pessoa", "unidade", "TEXT"),
 ]
 
 
@@ -54,15 +55,7 @@ def migrar(con: sqlite3.Connection) -> list[str]:
 
 
 def criar_schema(con: sqlite3.Connection) -> None:
-    sql = SCHEMA.read_text(encoding="utf-8")
-    try:
-        con.executescript(sql)
-    except sqlite3.OperationalError:
-        # Banco pré-existente sem as colunas mais novas: migra e refaz o
-        # script (idempotente, tudo com IF NOT EXISTS) para criar os
-        # índices/views que dependem delas.
-        migrar(con)
-        con.executescript(sql)
+    con.executescript(SCHEMA.read_text(encoding="utf-8"))
     con.commit()
     migrar(con)
 

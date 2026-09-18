@@ -36,6 +36,14 @@ TIPOS = {
         "rotulo": "Ativo que você consome foi publicado",
         "urgente": False,
     },
+    "acesso_solicitado": {
+        "rotulo": "Pleito de acesso aguardando decisão",
+        "urgente": True,
+    },
+    "acesso_decidido": {
+        "rotulo": "Resposta ao seu pleito de acesso",
+        "urgente": True,
+    },
 }
 
 CANAIS = {"app": "No catálogo", "email": "E-mail", "teams": "Teams"}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block titulo %}Pleitos de acesso{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Pleitos de acesso</h1>
+  <p>Quem pediu, o que pediu e por quê. Você pode conceder o papel pleiteado, conceder
+     outro ou negar — e em qualquer caso a pessoa lê a sua resposta.</p>
+</div>
+
+<div class="chips">
+  <a class="chip {{ 'limpar' if filtro }}" href="{{ url_for('web.acessos') }}">Todos</a>
+  <a class="chip {{ 'limpar' if filtro != 'pendente' }}"
+     href="{{ url_for('web.acessos', status='pendente') }}">Pendentes
+     {%- if pendentes %} <strong>{{ pendentes }}</strong>{% endif %}</a>
+  <a class="chip {{ 'limpar' if filtro != 'aprovada' }}"
+     href="{{ url_for('web.acessos', status='aprovada') }}">Aprovados</a>
+  <a class="chip {{ 'limpar' if filtro != 'negada' }}"
+     href="{{ url_for('web.acessos', status='negada') }}">Negados</a>
+</div>
+
+{% if not pleitos %}
+  <div class="cartao"><p class="vazio">Nenhum pleito neste recorte.</p></div>
+{% endif %}
+
+{% for p in pleitos %}
+  <div class="cartao pleito" id="pleito-{{ p.id_solicitacao }}">
+    <div class="pleito-cabeca">
+      <div>
+        <h2>{{ p.nome }}</h2>
+        <p class="discreto mono">{{ p.matricula }} · unidade {{ p.unidade }} · {{ p.email }}</p>
+      </div>
+      <span class="etiqueta {{ 'em_validacao' if p.status == 'pendente' else ('publicado' if p.status == 'aprovada' else 'descontinuado') }}">
+        {{ {'pendente': 'aguardando decisão', 'aprovada': 'aprovado', 'negada': 'negado'}[p.status] }}
+      </span>
+    </div>
+
+    <p><strong>Pleiteia:</strong> {{ papeis[p.papel_pleiteado] }}
+       <span class="discreto">· pedido em {{ p.criado_em }}</span></p>
+    {% if p.justificativa %}
+      <p class="regra">{{ p.justificativa }}</p>
+    {% else %}
+      <p class="discreto">Sem justificativa — pergunte antes de conceder papel amplo.</p>
+    {% endif %}
+
+    {% if p.status == 'pendente' %}
+      <form method="post" action="{{ url_for('web.decidir_acesso', id_solicitacao=p.id_solicitacao) }}">
+        <div class="linha-campos">
+          <div class="campo">
+            <label for="papel-{{ p.id_solicitacao }}">Papel a conceder</label>
+            <select id="papel-{{ p.id_solicitacao }}" name="papel_concedido">
+              {% for chave, rotulo in papeis.items() %}
+                {% if chave != 'admin' or pode_admin %}
+                  <option value="{{ chave }}" {{ 'selected' if chave == p.papel_pleiteado }}>{{ rotulo }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="campo">
+            <label for="escopo-{{ p.id_solicitacao }}">Alcance</label>
+            <select id="escopo-{{ p.id_solicitacao }}" name="escopo_tipo">
+              <option value="global">Global — todo o catálogo</option>
+              <option value="dominio">Um domínio</option>
+              <option value="squad">Uma squad</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="alvo-{{ p.id_solicitacao }}">Domínio ou squad</label>
+            <select id="alvo-{{ p.id_solicitacao }}" name="escopo_id">
+              <option value="">— quando o alcance for global</option>
+              <optgroup label="Domínios">
+                {% for d in dominios %}<option value="{{ d.id_item }}">{{ d.nome }}</option>{% endfor %}
+              </optgroup>
+              <optgroup label="Squads">
+                {% for s in squads %}<option value="{{ s.id_squad }}">{{ s.nome }}</option>{% endfor %}
+              </optgroup>
+            </select>
+          </div>
+        </div>
+        <div class="campo">
+          <label for="resposta-{{ p.id_solicitacao }}">Resposta ao solicitante</label>
+          <textarea id="resposta-{{ p.id_solicitacao }}" name="resposta"
+                    placeholder="Obrigatória ao negar e ao conceder papel diferente do pleiteado."></textarea>
+        </div>
+        <div class="acoes">
+          <button type="submit" name="decisao" value="aprovar" class="aprovar">Conceder</button>
+          <button type="submit" name="decisao" value="negar" class="perigo">Negar</button>
+        </div>
+      </form>
+      <p class="discreto">Ninguém concede acesso a si mesmo — a fila recusa o próprio pleito.</p>
+    {% else %}
+      <table>
+        <tbody>
+          <tr><td>Decisão</td><td><strong>
+            {%- if p.papel_concedido %}{{ papeis[p.papel_concedido] }}
+              <span class="discreto">em {{ p.escopo_rotulo }}</span>
+            {%- else %}negado{% endif -%}
+          </strong></td></tr>
+          <tr><td>Por</td><td class="mono">{{ p.decidido_por }} <span class="discreto">em {{ p.decidido_em }}</span></td></tr>
+          {% if p.resposta %}<tr><td>Resposta</td><td>{{ p.resposta }}</td></tr>{% endif %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+{% endfor %}
+{% endblock %}

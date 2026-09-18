@@ -835,3 +835,16 @@ details.duvida > p { margin: 0 0 12px 20px; font-size: 13.5px; max-width: 78ch; 
   .rodape { justify-content: flex-start; }
   .identidade .cartilha-atalho .rotulo { display: none; }
 }
+
+/* ------------------------------------------------- pleitos de acesso */
+.pleito-cabeca {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 14px; flex-wrap: wrap;
+}
+.pleito-cabeca h2 { margin: 0 0 2px; }
+.pleito-cabeca p { margin: 0; }
+.cartao.pleito { scroll-margin-top: 16px; }
+.pleito-linha { padding: 10px 0; border-bottom: 1px solid var(--linha-suave); }
+.pleito-linha:last-child { border-bottom: none; }
+.pleito-linha p { margin: 0 0 5px; }
+.pleito-linha .regra { margin: 6px 0; }
