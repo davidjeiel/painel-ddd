@@ -8,9 +8,11 @@ realidade, e ninguém aprova o que escreveu. Esta cartilha mostra, para cada pap
 você consegue fazer, o que a ferramenta vai recusar e por quê — e a rotina que resolve o
 seu dia.
 
-> Esta cartilha é gerada a partir do código em produção: a matriz de permissões vem de
-> `catalogo/acesso.py` e a tabela de ritos, de `governanca.POLITICAS_PADRAO`. Se a
-> ferramenta mudar, este documento precisa mudar junto.
+> **Esta cartilha também está dentro da ferramenta**, em `/cartilha` — link no rodapé de
+> qualquer tela e ao lado do seu nome, no topo. Lá a matriz de permissões é lida de
+> `catalogo/acesso.py` e a tabela de ritos, das políticas cadastradas, então a página
+> nunca descreve uma regra que o sistema já não aplica. Este arquivo é a cópia
+> versionada: se a ferramenta mudar, ele precisa mudar junto.
 
 | Papel | Você responde por |
 | --- | --- |

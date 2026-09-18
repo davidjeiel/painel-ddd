@@ -8,7 +8,8 @@ from functools import wraps
 from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
                    request, session, url_for)
 
-from . import (acesso, governanca, integracoes, notificacoes, servicos, tipos)
+from . import (acesso, cartilha as guia, governanca, integracoes, notificacoes,
+               servicos, tipos)
 from .db import get_db
 
 bp = Blueprint("web", __name__)
@@ -42,6 +43,7 @@ SECOES = {
     "web.assumir": "validacoes",
     "web.liberar": "validacoes",
     "web.politicas": "politicas",
+    "web.cartilha": "cartilha",
 }
 
 # Abas da visão 360°: leitura de um lado, escrita dentro da aba a que pertence.
@@ -805,3 +807,28 @@ def politicas():
         l["etapas"] = json.loads(l["etapas"])
     return render_template("politicas.html", politicas=linhas,
                            matriz=governanca.MATRIZ_MUDANCA)
+
+
+@bp.route("/cartilha")
+def cartilha():
+    """Guia de uso por perfil. A prosa vem do módulo; as tabelas, do sistema.
+
+    Matriz de permissões e ritos são derivados de `acesso.PERMISSOES` e da tabela
+    de políticas — assim a cartilha não descreve uma ferramenta que já mudou.
+    """
+    con = get_db()
+    ritos = [dict(l) for l in con.execute(
+        "SELECT * FROM politica_governanca ORDER BY tipo_item, criticidade")]
+    for r in ritos:
+        r["etapas"] = [guia.ETAPA_ROTULO.get(e, e) for e in json.loads(r["etapas"])]
+        r["criticidade"] = guia.CRITICIDADE_ROTULO.get(r["criticidade"], r["criticidade"])
+    return render_template(
+        "cartilha.html",
+        perfis=guia.PERFIS,
+        primeiros_passos=guia.PRIMEIROS_PASSOS,
+        regras=guia.REGRAS,
+        duvidas=guia.DUVIDAS,
+        matriz=guia.matriz(),
+        papeis_ordem=guia.PAPEIS_ORDEM,
+        papel_curto=guia.PAPEL_CURTO,
+        ritos=ritos)

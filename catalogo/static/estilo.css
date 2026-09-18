@@ -597,8 +597,11 @@ details.impacto li { padding: 2px 0; }
   .conteudo { padding: 18px 14px 40px; }
   .grade.duas { grid-template-columns: 1fr; }
   .topo { flex-direction: column; align-items: stretch; }
-  .busca-global { max-width: none; }
-  .identidade { text-align: right; }
+  /* em coluna, o flex-basis de 380px vira altura: a busca abria um vão vazio */
+  .busca-global { max-width: none; min-width: 0; flex: 0 0 auto; }
+  /* sem quebrar, a barra de identidade não cabe e estica a página inteira:
+     era ela a rolagem horizontal do celular, em todas as telas */
+  .identidade { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -663,3 +666,172 @@ fieldset.caixas-tipo {
   padding: 8px 14px 12px; margin-bottom: 14px;
 }
 fieldset.caixas-tipo legend { font-size: 12.5px; color: var(--tinta-suave); padding: 0 6px; }
+
+/* ============================================================ cartilha de uso
+   Uma cor por papel, repetida no atalho do topo da página, na borda do cartão e
+   no nome do perfil: quem procura "o meu" acha pela cor antes de ler. Os tokens
+   ficam neste bloco, e não no geral, porque só esta tela os usa. */
+:root {
+  --perfil-negocio: #a2610b;    --perfil-negocio-bg: #fbf1de;
+  --perfil-tech: #1a56c4;       --perfil-tech-bg: #e8effe;
+  --perfil-arquiteto: #6d3ec4;  --perfil-arquiteto-bg: #f0eafd;
+  --perfil-curador: #0e7a58;    --perfil-curador-bg: #e4f4ed;
+  --perfil-admin: #445067;      --perfil-admin-bg: #eaeef5;
+  --perfil-consulta: #55647c;   --perfil-consulta-bg: #eef1f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --perfil-negocio: #e3ab5b;    --perfil-negocio-bg: #33280f;
+    --perfil-tech: #7f9cff;       --perfil-tech-bg: #1d2747;
+    --perfil-arquiteto: #b494fb;  --perfil-arquiteto-bg: #281d45;
+    --perfil-curador: #58d3a8;    --perfil-curador-bg: #12332a;
+    --perfil-admin: #a9b6cd;      --perfil-admin-bg: #222a3b;
+    --perfil-consulta: #9aa4bb;   --perfil-consulta-bg: #1d2434;
+  }
+}
+
+:root[data-tema="escuro"] {
+  --perfil-negocio: #e3ab5b;    --perfil-negocio-bg: #33280f;
+  --perfil-tech: #7f9cff;       --perfil-tech-bg: #1d2747;
+  --perfil-arquiteto: #b494fb;  --perfil-arquiteto-bg: #281d45;
+  --perfil-curador: #58d3a8;    --perfil-curador-bg: #12332a;
+  --perfil-admin: #a9b6cd;      --perfil-admin-bg: #222a3b;
+  --perfil-consulta: #9aa4bb;   --perfil-consulta-bg: #1d2434;
+}
+
+.atalhos-perfil {
+  display: grid; gap: 12px; margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(152px, 1fr));
+}
+.cartao-perfil {
+  display: block; padding: 13px 15px; border-radius: var(--raio);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-left: 4px solid var(--tom, var(--marca)); color: var(--tinta);
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.cartao-perfil:hover {
+  text-decoration: none; box-shadow: var(--sombra); transform: translateY(-1px);
+}
+.cartao-perfil .papel {
+  display: block; font-weight: 700; font-size: 14px; color: var(--tom, var(--marca));
+}
+.cartao-perfil .lema {
+  display: block; font-size: 12.5px; color: var(--tinta-suave); margin-top: 2px;
+}
+
+.cartao-perfil.negocio, .cartao.perfil.negocio { --tom: var(--perfil-negocio); }
+.cartao-perfil.tech, .cartao.perfil.tech { --tom: var(--perfil-tech); }
+.cartao-perfil.arquiteto, .cartao.perfil.arquiteto { --tom: var(--perfil-arquiteto); }
+.cartao-perfil.curador, .cartao.perfil.curador { --tom: var(--perfil-curador); }
+.cartao-perfil.admin, .cartao.perfil.admin { --tom: var(--perfil-admin); }
+.cartao-perfil.consulta, .cartao.perfil.consulta { --tom: var(--perfil-consulta); }
+
+.cartao.perfil { border-left: 4px solid var(--tom, var(--marca)); scroll-margin-top: 16px; }
+.perfil-cabeca { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.perfil-cabeca h2 { color: var(--tom, var(--marca)); margin: 0; }
+.perfil-cabeca code {
+  background: var(--neutro-bg-2); border-radius: 5px; padding: 1px 7px;
+  color: var(--tinta-suave);
+}
+.lema-longo { margin: 8px 0 18px; max-width: 74ch; }
+
+.grade.duas-iguais { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+.pode, .naopode { list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
+.pode li, .naopode li { padding: 5px 0 5px 22px; position: relative; }
+.pode li::before {
+  content: "✓"; position: absolute; left: 0; color: var(--sucesso); font-weight: 700;
+}
+.naopode li::before {
+  content: "✕"; position: absolute; left: 0; color: var(--risco); font-weight: 700;
+}
+.naopode .porque {
+  display: block; color: var(--tinta-suave); font-size: 12.5px; margin-top: 1px;
+}
+
+.rotina, .passos-guia { margin: 10px 0 0; padding-left: 0; list-style: none; counter-reset: guia; }
+.rotina > li, .passos-guia > li {
+  counter-increment: guia; position: relative; padding: 0 0 12px 34px; font-size: 14px;
+}
+.rotina > li::before, .passos-guia > li::before {
+  content: counter(guia); position: absolute; left: 0; top: -1px;
+  width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; background: var(--marca-suave); color: var(--marca);
+}
+.cartao.perfil .rotina > li::before {
+  background: var(--tom-bg, var(--marca-suave)); color: var(--tom, var(--marca));
+}
+.cartao.perfil.negocio { --tom-bg: var(--perfil-negocio-bg); }
+.cartao.perfil.tech { --tom-bg: var(--perfil-tech-bg); }
+.cartao.perfil.arquiteto { --tom-bg: var(--perfil-arquiteto-bg); }
+.cartao.perfil.curador { --tom-bg: var(--perfil-curador-bg); }
+.cartao.perfil.admin { --tom-bg: var(--perfil-admin-bg); }
+.cartao.perfil.consulta { --tom-bg: var(--perfil-consulta-bg); }
+.rotina .onde {
+  display: block; font-size: 12px; color: var(--tinta-suave); margin-top: 2px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+.passos-guia > li h3 { margin: 0 0 4px; font-size: 14px; }
+.passos-guia > li p { margin: 0 0 4px; font-size: 14px; }
+
+.regra, .nota {
+  background: var(--neutro-bg); border-left: 3px solid var(--marca-borda);
+  border-radius: 0 8px 8px 0; padding: 11px 14px; font-size: 13.5px;
+  color: var(--tinta); margin: 0;
+}
+.nota { margin-top: 18px; }
+.cartao.perfil .nota { border-left-color: var(--tom, var(--marca)); }
+
+table.matriz td.centro, table.matriz th.centro { text-align: center; }
+table.matriz td.sim { color: var(--sucesso); font-weight: 700; }
+table.matriz td.nao { color: var(--tinta-suave); }
+table.matriz td:first-child { white-space: nowrap; }
+
+details.duvida { border-bottom: 1px solid var(--linha-suave); padding: 4px 0; }
+details.duvida:last-of-type { border-bottom: none; }
+details.duvida > summary {
+  cursor: pointer; padding: 9px 0; font-weight: 600; font-size: 14px;
+  list-style: none; display: flex; gap: 9px; align-items: baseline;
+}
+details.duvida > summary::-webkit-details-marker { display: none; }
+details.duvida > summary::before {
+  content: "▸"; color: var(--tinta-suave); font-size: 11px; flex: 0 0 11px;
+}
+details.duvida[open] > summary::before { content: "▾"; }
+details.duvida > p { margin: 0 0 12px 20px; font-size: 13.5px; max-width: 78ch; }
+.rodape-cartilha { margin-top: 18px; }
+
+/* --------------------------------------- atalho da cartilha e rodapé do site */
+.identidade .cartilha-atalho {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  color: var(--tinta-suave); border: 1px solid var(--linha);
+  border-radius: 999px; padding: 4px 11px 4px 8px; font-size: 12.5px;
+}
+.identidade .cartilha-atalho:hover {
+  text-decoration: none; color: var(--marca); border-color: var(--marca-borda);
+  background: var(--marca-suave);
+}
+.identidade .cartilha-atalho.ativo {
+  color: var(--marca); border-color: var(--marca-borda); background: var(--marca-suave);
+}
+.identidade .cartilha-atalho .glifo {
+  width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--marca-suave-forte); color: var(--marca);
+  font-size: 11px; font-weight: 700;
+}
+
+.rodape {
+  margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--linha);
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 14px; flex-wrap: wrap; font-size: 13px;
+}
+.rodape .marca-rodape { margin: 0; color: var(--tinta-suave); letter-spacing: .04em; }
+.rodape nav { display: flex; gap: 18px; flex-wrap: wrap; }
+.rodape nav a { color: var(--tinta-suave); }
+.rodape nav a:hover { color: var(--marca); }
+
+@media (max-width: 720px) {
+  .rodape { justify-content: flex-start; }
+  .identidade .cartilha-atalho .rotulo { display: none; }
+}

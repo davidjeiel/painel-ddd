@@ -82,6 +82,12 @@
             {% if leitura %}<span class="etiqueta em_revisao">leitura</span>{% endif %}
           {% else %}<span class="etiqueta alta">identifique-se</span>{% endif %}
         </a>
+        {#- Ao lado de quem você é: o que o seu papel permite fazer. -#}
+        <a class="cartilha-atalho{{ ' ativo' if secao == 'cartilha' }}"
+           href="{{ url_for('web.cartilha') }}"
+           title="Cartilha: o que o seu papel faz na ferramenta">
+          <span class="glifo" aria-hidden="true">?</span><span class="rotulo">Cartilha</span>
+        </a>
       </div>
     </div>
 
@@ -91,6 +97,15 @@
       {% endfor %}
     {% endwith %}
     {% block conteudo %}{% endblock %}
+
+    <footer class="rodape">
+      <p class="marca-rodape">Catálogo Corporativo DDD</p>
+      <nav aria-label="Links do rodapé">
+        <a href="{{ url_for('web.cartilha') }}">Cartilha de uso</a>
+        <a href="{{ url_for('web.politicas') }}">Políticas de governança</a>
+        <a href="{{ url_for('web.mapa') }}">Mapas</a>
+      </nav>
+    </footer>
   </main>
 </div>
 

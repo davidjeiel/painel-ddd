@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block titulo %}Cartilha — como usar o catálogo{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Cartilha do catálogo</h1>
+  <p>Cada papel tem um trabalho, e a ferramenta só mostra o seu. Aqui está o que você
+     consegue fazer, o que ela vai recusar e por quê — e a rotina que resolve o seu dia.</p>
+</div>
+
+<nav class="atalhos-perfil" aria-label="Ir para o seu perfil">
+  {% for p in perfis %}
+    <a class="cartao-perfil {{ p.chave }}" href="#{{ p.chave }}">
+      <span class="papel">{{ p.rotulo }}</span>
+      <span class="lema">{{ p.lema }}</span>
+    </a>
+  {% endfor %}
+</nav>
+
+<div class="cartao" id="comum">
+  <h2>Os primeiros cinco minutos</h2>
+  <p class="discreto">Vale para qualquer papel. Faça isto uma vez e o resto da cartilha
+     faz sentido.</p>
+  <ol class="passos-guia">
+    {% for passo in primeiros_passos %}
+      <li>
+        <h3>{{ passo.titulo }}</h3>
+        <p>{{ passo.texto|safe }}</p>
+        {% if passo.extra %}<p class="discreto">{{ passo.extra|safe }}</p>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+
+  <h3>Duas regras que valem para todo mundo</h3>
+  <div class="grade duas-iguais">
+    {% for titulo, texto in regras %}
+      <div class="regra">
+        <strong>{{ titulo }}.</strong> {{ texto }}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% for p in perfis %}
+  <div class="cartao perfil {{ p.chave }}" id="{{ p.chave }}">
+    <div class="perfil-cabeca">
+      <h2>{{ p.rotulo }}</h2>
+      <code class="mono">{{ p.papel }}</code>
+    </div>
+    <p class="lema-longo"><strong>{{ p.lema }}:</strong> {{ p.resumo }}</p>
+
+    {% if p.faz or p.recusa %}
+      <div class="grade duas-iguais">
+        <div>
+          <h3>O que você faz</h3>
+          <ul class="pode">
+            {% for item in p.faz %}<li>{{ item|safe }}</li>{% endfor %}
+          </ul>
+        </div>
+        <div>
+          <h3>O que a ferramenta recusa</h3>
+          <ul class="naopode">
+            {% for texto, porque in p.recusa %}
+              <li>{{ texto }}{% if porque %}<span class="porque">{{ porque }}</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+
+    <h3>{{ p.rotina_titulo }}</h3>
+    <ol class="rotina">
+      {% for texto, onde in p.rotina %}
+        <li>{{ texto|safe }}{% if onde %}<span class="onde">{{ onde }}</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+
+    <p class="nota">{{ p.nota|safe }}</p>
+  </div>
+{% endfor %}
+
+<div class="cartao" id="referencia">
+  <h2>Quem pode fazer o quê</h2>
+  <p class="discreto">A matriz completa, do jeito que o sistema aplica. Se um botão não
+     aparece para você, a resposta está aqui — ou no modo de leitura.</p>
+  <div class="rolagem">
+    <table class="matriz">
+      <thead>
+        <tr><th>Ação</th>
+          {% for papel in papeis_ordem %}<th class="centro">{{ papel_curto[papel] }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in matriz %}
+          <tr><td>{{ linha.rotulo }}</td>
+            {% for papel in papeis_ordem %}
+              {% if linha.papeis[papel] %}<td class="centro sim"><span class="leitor">permitido</span>✓</td>
+              {% else %}<td class="centro nao"><span class="leitor">não permitido</span>—</td>{% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="nota"><strong>“Decidir validação” é permissão para entrar na fila</strong> —
+    qual etapa você decide depende do papel: <em>negocial</em> exige negócio,
+    <em>técnica</em> exige tech lead, <em>arquitetural</em> exige arquiteto. Admin decide
+    qualquer uma. E em qualquer caso, o <strong>responsável formal</strong> do ativo pode
+    decidir a etapa correspondente ao papel que exerce sobre ele.</p>
+</div>
+
+<div class="cartao" id="ritos">
+  <h2>O rito de cada tipo de ativo</h2>
+  <p class="discreto">Governança proporcional: um endpoint não passa pelo mesmo rito de um
+     contexto delimitado. Quem define é a política do tipo e da criticidade —
+     <a href="{{ url_for('web.politicas') }}">a mesma que a tela de políticas mostra</a>.</p>
+  <div class="rolagem">
+    <table>
+      <thead><tr><th>Tipo</th><th>Criticidade</th><th>Etapas de validação</th>
+                 <th>Evidências</th><th>Score mínimo</th><th>Prazo por etapa</th>
+                 <th>Revisar a cada</th></tr></thead>
+      <tbody>
+        {% for r in ritos %}
+          <tr><td>{{ r.tipo_item|rotulo_tipo }}</td>
+              <td>{{ r.criticidade }}</td>
+              <td>{{ r.etapas|join(' → ') }}</td>
+              <td>{{ r.evidencia_minima or '—' }}</td>
+              <td>{{ r.score_minimo }}%</td>
+              <td>{{ r.sla_horas }}h</td>
+              <td>{{ r.periodicidade_revisao_dias }} dias</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="nota"><strong>Marcar um ativo como crítico aperta o rito de verdade</strong>:
+    mais uma etapa, mais uma evidência, score mais alto e metade do prazo. Use a
+    criticidade pelo risco real, não por importância percebida.</p>
+</div>
+
+<div class="cartao" id="duvidas">
+  <h2>Quando algo não funciona</h2>
+  <p class="discreto">As cinco confusões mais prováveis, e o que fazer com cada uma.</p>
+  {% for pergunta, resposta in duvidas %}
+    <details class="duvida">
+      <summary>{{ pergunta }}</summary>
+      <p>{{ resposta|safe }}</p>
+    </details>
+  {% endfor %}
+</div>
+
+<p class="discreto rodape-cartilha">
+  A matriz de permissões desta página é lida de <code class="mono">catalogo/acesso.py</code>
+  e a tabela de ritos, das políticas cadastradas — mudou a regra, mudou a cartilha.
+</p>
+{% endblock %}
