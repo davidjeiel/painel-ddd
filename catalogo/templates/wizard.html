@@ -10,6 +10,11 @@
 {% if not tipo_item %}
   <div class="cartao">
     <h2>Escolha o tipo de ativo</h2>
+    {% if not blocos %}
+      <p class="vazio">Seu papel não escreve em nenhum tipo de ativo. Você consulta o
+        catálogo inteiro; para cadastrar,
+        <a href="{{ url_for('web.solicitar_acesso') }}">pleiteie um papel</a>.</p>
+    {% endif %}
     {% for bloco, lista in blocos.items() %}
       <h3>{{ bloco }}</h3>
       <div class="acoes">

@@ -29,23 +29,34 @@ seu dia.
 
 Vale para qualquer papel. Faça isto uma vez e o resto da cartilha faz sentido.
 
-### 1. Diga quem você é
+### 1. Cadastre-se e pleiteie um papel
 
-Abra **Seu perfil** no menu e escolha o seu nome. Isso não é formalidade: é esse nome que
-assina as publicações que você fizer, e cada publicação gera um registro imutável com hash
-e trilha de auditoria. Enquanto você não se identificar, a ferramenta recusa qualquer
-escrita e te manda de volta para essa tela.
+Em **Seu perfil › Cadastre-se e pleiteie um papel** (`/acesso/solicitar`) você informa
+matrícula (uma letra — normalmente C, E, F ou P — seguida de seis números, como
+`C123456`), nome completo, e-mail, unidade (código de quatro números, como `0427`) e o
+papel que pretende exercer, com uma justificativa.
 
-Na mesma tela você vê **seus papéis**. Se a lista estiver vazia, você consegue consultar o
-catálogo mas não escrever nele — peça a um administrador.
+O cadastro entra na hora; **o papel não**. Quem concede é outra pessoa — um curador ou um
+administrador — que pode conceder o papel pedido, conceder outro ou negar, sempre com uma
+resposta escrita. Ela chega no sino e fica em Seu perfil. Até a decisão sair, você
+consulta o catálogo inteiro e não escreve em nada.
 
-### 2. Escolha o modo de trabalho
+### 2. Diga quem você é
+
+Identificado, é o seu nome que assina as publicações que você fizer, e cada publicação
+gera um registro imutável com hash e trilha de auditoria. Enquanto você não se
+identificar, a ferramenta recusa qualquer escrita e te manda de volta para o perfil.
+
+Na mesma tela você vê **seus papéis** — com o alcance de cada um e em que bloco de tipos
+ele escreve — e o andamento dos seus pleitos.
+
+### 3. Escolha o modo de trabalho
 
 **Edição** mostra as ações que o seu papel permite. **Leitura** esconde todos os
 formulários de escrita — útil quando você está só consultando, apresentando a tela para
 alguém ou com medo de clicar errado. Dá para alternar quando quiser.
 
-### 3. Aprenda três atalhos que economizam o dia
+### 4. Aprenda três atalhos que economizam o dia
 
 - **Busca global** no topo de qualquer tela: tecle `/` ou `Ctrl+K`, digite parte do nome ou
   do código, e vá direto ao ativo.
@@ -54,7 +65,13 @@ alguém ou com medo de clicar errado. Dá para alternar quando quiser.
 - **Notificações**: o sino no topo avisa quando algo entra na sua fila ou quando um prazo
   está vencendo. Em *Preferências* você desliga o que for ruído.
 
-### Duas regras que valem para todo mundo
+### Três regras que valem para todo mundo
+
+**O papel autoriza a ação e o objeto.** Quem responde pelo negócio escreve na Estrutura
+DDD — domínio, subdomínio, contexto, capacidade. Quem responde pela técnica escreve nos
+ativos técnicos — sistema, aplicação, repositório, API, endpoint, base de dados, objeto de
+dado, evento. Arquiteto, curador e admin atravessam os dois blocos. Fora do seu bloco, o
+catálogo é consulta, e a rota recusa mesmo que você chegue nela pelo endereço.
 
 **Quem submete não aprova.** Se você enviou uma revisão para validação, a ferramenta não
 deixa você mesmo decidir sobre ela — nem se o seu papel permitir aquela etapa. É
@@ -87,6 +104,8 @@ coisas, ela não tem onde se apoiar.
   tech lead
 - Importar descobertas e triar a bandeja — é o caminho do time técnico
 - Descontinuar um ativo publicado — fica com curador, arquiteto ou admin
+- Cadastrar ou editar ativo técnico — sistema, aplicação, API, endpoint e base de dados
+  são do outro bloco: para você eles são consulta
 
 **Sua rotina**
 
@@ -126,6 +145,8 @@ resposta.
 - Descontinuar um ativo publicado — a saída de uso passa por curador, arquiteto ou admin
 - Decidir etapas negocial e arquitetural — a menos que você seja o responsável formal
   daquele ativo
+- Cadastrar ou editar a hierarquia de negócio — domínio, subdomínio, contexto e
+  capacidade são do bloco de negócio: para você eles são consulta
 
 **Sua rotina: trazer um sistema inteiro para o catálogo**
 
@@ -203,11 +224,14 @@ resolver.
 - Importar descobertas e triar a bandeja
 - Enviar para validação e abrir revisão
 - Descontinuar ativos que saem de uso
+- **Conceder papéis** pleiteados, com o alcance que decidir
 
 **O que a ferramenta recusa**
 
 - Decidir validações — por desenho: quem cuida do cadastro não é quem o aprova. Você
   prepara, outra pessoa valida
+- Conceder o papel de administrador — só um administrador cria outro; sem esse teto,
+  administrar a ferramenta se espalharia por concessão lateral
 
 **Sua rotina: caçar o que está apodrecendo**
 
@@ -223,6 +247,9 @@ resolver.
    **caminho até a publicação** — cinco passos, e cada um leva à aba que resolve a
    pendência.
 6. Complete, submeta, e deixe a validação com quem valida.
+7. Antes de sair, passe em **Pleitos de acesso**: cada pleito parado é alguém que não
+   consegue trabalhar. Conceda o papel pedido, conceda um menor ou negue — mas responda.
+   *(Menu › Administração › Pleitos de acesso)*
 
 > **Você não decide validação, e isso é de propósito.** Se a mesma pessoa preenchesse e
 > aprovasse, o rito seria decorativo. Quando precisar destravar uma fila parada, chame quem
@@ -250,16 +277,21 @@ Justamente por isso, é o papel a distribuir com mais cuidado.
   exceção de papel
 - Editar uma versão publicada sem abrir revisão
 
-**Conceder um papel** — pela linha de comando, no servidor:
+**Conceder um papel** — em **Pleitos de acesso** (`/acessos`): escolha o papel, o alcance
+(global, um domínio ou uma squad) e escreva a resposta. Só você concede o papel de
+administrador; o curador despacha todo o resto.
+
+O escopo por domínio é o mais saudável em escala: a pessoa decide no que conhece. A
+ferramenta resolve o domínio de qualquer ativo subindo a hierarquia, então um papel
+concedido no domínio vale para os endpoints abaixo dele.
+
+Fora da tela, a linha de comando faz o mesmo — útil para semear o primeiro administrador
+de um ambiente novo:
 
 ```bash
 flask --app catalogo conceder ana.torres negocio              # papel global
 flask --app catalogo conceder ana.torres negocio --dominio 3  # só no domínio de id 3
 ```
-
-O escopo por domínio é o mais saudável em escala: a pessoa decide no que conhece. A
-ferramenta resolve o domínio de qualquer ativo subindo a hierarquia, então um papel
-concedido no domínio vale para os endpoints abaixo dele.
 
 **Manutenção que precisa de agenda**
 
@@ -321,7 +353,8 @@ resposta está aqui — ou no modo de leitura.
 | Importar descobertas | — | sim | — | sim | sim | — |
 | Triar a bandeja | — | sim | — | sim | sim | — |
 | Descontinuar ativo | — | — | sim | sim | sim | — |
-| Conceder papéis | — | — | — | — | sim | — |
+| Conceder papéis | — | — | — | sim | sim | — |
+| Administrar a ferramenta | — | — | — | — | sim | — |
 
 "Decidir validação" é permissão para **entrar na fila** — qual etapa você decide depende do
 papel: *negocial* exige negócio, *técnica* exige tech lead, *arquitetural* exige arquiteto.
@@ -361,9 +394,17 @@ Quem define é a política do tipo e da criticidade.
 As cinco confusões mais prováveis, e o que fazer com cada uma.
 
 **"O botão que eu usava sumiu"**
-Três causas, nesta ordem: você está em **modo de leitura** (troque em *Seu perfil*); o seu
-**papel** não permite aquela ação (veja a tabela acima); ou o ativo está **publicado** e
-precisa de uma revisão aberta antes de aceitar mudanças.
+Quatro causas, nesta ordem: você está em **modo de leitura** (troque em *Seu perfil*); o
+seu **papel** não permite aquela ação (veja a tabela acima); o ativo é de um **bloco que o
+seu papel não escreve** — negócio não mexe em ativo técnico e vice-versa; ou o ativo está
+**publicado** e precisa de uma revisão aberta antes de aceitar mudanças.
+
+**"Pedi um papel e não recebi nada"**
+O pleito fica em *Seu perfil* com o estado dele. *Pendente* significa que ninguém
+despachou ainda — um curador ou administrador precisa decidir, e você será avisado pelo
+sino. Negado, ou concedido com papel menor, a resposta de quem decidiu está ali, escrita.
+Pleito sem justificativa costuma voltar com papel menor do que o pedido: diga o que você
+vai cadastrar ou decidir.
 
 **"Não consigo aprovar esta validação"**
 Ou a **etapa exige um papel** que você não tem — a mensagem diz qual —, ou **você submeteu**

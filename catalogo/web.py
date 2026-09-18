@@ -44,6 +44,9 @@ SECOES = {
     "web.liberar": "validacoes",
     "web.politicas": "politicas",
     "web.cartilha": "cartilha",
+    "web.acessos": "acessos",
+    "web.decidir_acesso": "acessos",
+    "web.solicitar_acesso": "perfil",
 }
 
 # Abas da visão 360°: leitura de um lado, escrita dentro da aba a que pertence.
@@ -87,14 +90,14 @@ def modo_leitura() -> bool:
     return session.get("modo", "edicao") == "leitura"
 
 
-def pode(acao: str, id_item: int | None = None) -> bool:
+def pode(acao: str, id_item: int | None = None, tipo_item: str | None = None) -> bool:
     """Autorização para uso nos templates: esconde o que a pessoa não pode fazer."""
     if modo_leitura():
         return False
     quem = pessoa_atual()
     if quem is None:
         return False
-    return acesso.pode(get_db(), quem["id_pessoa"], acao, id_item)
+    return acesso.pode(get_db(), quem["id_pessoa"], acao, id_item, tipo_item)
 
 
 def exige(acao: str):
@@ -186,6 +189,22 @@ def dashboard():
 
 
 # ------------------------------------------------------------------- perfil
+def _com_escopo(con, pleitos: list[dict]) -> list[dict]:
+    for p in pleitos:
+        p["escopo_rotulo"] = acesso.rotulo_escopo(con, p["escopo_tipo"], p["escopo_id"])
+    return pleitos
+
+
+def _papeis_legiveis(con, quem: dict | None) -> list[dict]:
+    if not quem:
+        return []
+    linhas = acesso.papeis(con, quem["id_pessoa"])
+    for p in linhas:
+        p["escopo_rotulo"] = acesso.rotulo_escopo(con, p["escopo_tipo"], p["escopo_id"])
+        p["blocos"] = sorted(acesso.BLOCOS_POR_PAPEL.get(p["papel"], ()))
+    return linhas
+
+
 @bp.route("/perfil", methods=["GET", "POST"])
 def perfil():
     """Quem é você e em que modo trabalha.
@@ -210,9 +229,92 @@ def perfil():
     return render_template(
         "perfil.html", pessoas=acesso.pessoas_ativas(con),
         papeis=acesso.papeis(con, quem["id_pessoa"]) if quem else [],
+        meus_pleitos=_com_escopo(con, acesso.solicitacoes(
+            con, id_pessoa=quem["id_pessoa"]) if quem else []),
+        papeis_com_escopo=_papeis_legiveis(con, quem),
         catalogo_papeis=acesso.PAPEIS, permissoes=acesso.PERMISSOES,
-        etapas=acesso.PAPEL_POR_ETAPA,
+        etapas=acesso.PAPEL_POR_ETAPA, blocos_por_papel=acesso.BLOCOS_POR_PAPEL,
         destino=request.args.get("destino", ""))
+
+
+# --------------------------------------------------------- pleito de acesso
+@bp.route("/acesso/solicitar", methods=["GET", "POST"])
+def solicitar_acesso():
+    """Cadastro e pleito de papel — a única tela de escrita aberta a quem não tem papel.
+
+    Tem de ser aberta: é justamente quem ainda não foi autorizado que precisa
+    dela. O que ela grava não autoriza nada — cria a pessoa e um pedido.
+    """
+    con = get_db()
+    if request.method == "POST":
+        try:
+            pleito = acesso.solicitar_acesso(
+                con,
+                matricula=request.form.get("matricula", ""),
+                nome=request.form.get("nome", ""),
+                email=request.form.get("email", ""),
+                unidade=request.form.get("unidade", ""),
+                papel_pleiteado=request.form.get("papel_pleiteado", ""),
+                justificativa=request.form.get("justificativa", ""))
+        except servicos.RegraDeNegocio as erro:
+            flash(str(erro), "erro")
+        else:
+            # quem acabou de se cadastrar já passa a ser quem ele disse que é:
+            # consulta liberada na hora, escrita só quando o papel sair
+            session["id_pessoa"] = pleito["id_pessoa"]
+            session["modo"] = "edicao"
+            flash("Cadastro registrado e pleito enviado. Até a decisão sair, você "
+                  "consulta o catálogo inteiro.", "ok")
+            return redirect(url_for("web.perfil"))
+
+    return render_template("solicitar_acesso.html", papeis=acesso.PAPEIS,
+                           blocos_por_papel=acesso.BLOCOS_POR_PAPEL,
+                           permissoes=acesso.PERMISSOES, form=request.form)
+
+
+@bp.route("/acessos")
+@exige("conceder")
+def acessos():
+    """Fila de pleitos — quem espera há mais tempo primeiro."""
+    con = get_db()
+    quem = pessoa_atual()
+    pleitos = acesso.solicitacoes(con, status=request.args.get("status") or None)
+    for p in pleitos:
+        p["escopo_rotulo"] = acesso.rotulo_escopo(con, p["escopo_tipo"], p["escopo_id"])
+    dominios = [dict(l) for l in con.execute(
+        "SELECT id_item, codigo, nome FROM item_catalogo WHERE tipo_item = 'dominio' "
+        "ORDER BY nome")]
+    squads = [dict(l) for l in con.execute("SELECT * FROM squad ORDER BY nome")]
+    return render_template(
+        "acessos.html", pleitos=pleitos, papeis=acesso.PAPEIS,
+        dominios=dominios, squads=squads,
+        pode_admin=acesso.pode_conceder(con, quem["id_pessoa"], "admin")[0],
+        filtro=request.args.get("status", ""),
+        pendentes=sum(1 for p in pleitos if p["status"] == "pendente"))
+
+
+@bp.route("/acessos/<int:id_solicitacao>/decidir", methods=["POST"])
+@exige("conceder")
+def decidir_acesso(id_solicitacao: int):
+    con = get_db()
+    quem = pessoa_atual()
+    try:
+        pleito = acesso.decidir_solicitacao(
+            con, id_solicitacao, quem["id_pessoa"],
+            aprovar=request.form.get("decisao") == "aprovar",
+            resposta=request.form.get("resposta", ""),
+            papel_concedido=request.form.get("papel_concedido") or None,
+            escopo_tipo=request.form.get("escopo_tipo", "global"),
+            escopo_id=request.form.get("escopo_id", type=int))
+    except servicos.RegraDeNegocio as erro:
+        flash(str(erro), "erro")
+    else:
+        if pleito["status"] == "aprovada":
+            flash(f"{pleito['nome']} agora é {acesso.PAPEIS[pleito['papel_concedido']]}"
+                  f" ({pleito['escopo_tipo']}).", "ok")
+        else:
+            flash(f"Pleito de {pleito['nome']} negado, com a resposta registrada.", "ok")
+    return redirect(url_for("web.acessos"))
 
 
 # ------------------------------------------------------------- notificações
@@ -450,8 +552,11 @@ def novo_ativo():
     con = get_db()
     tipo_item = request.values.get("tipo_item", "")
     if request.method == "POST" and request.form.get("acao") == "salvar":
-        if not pode("cadastrar"):
-            raise acesso.SemPermissao("Seu papel não permite cadastrar ativos.")
+        if not pode("cadastrar", tipo_item=tipo_item):
+            bloco = tipos.TIPOS[tipo_item].bloco if tipo_item in tipos.TIPOS else ""
+            raise acesso.SemPermissao(
+                f"Seu papel não permite cadastrar ativos do bloco {bloco}."
+                if bloco else "Seu papel não permite cadastrar ativos.")
         t = tipos.tipo(tipo_item)
         atributos = {c.nome: request.form.get(f"attr_{c.nome}", "").strip()
                      for c in t.campos}
@@ -485,9 +590,15 @@ def novo_ativo():
     politica = (governanca.politica(con, tipo_item,
                                     request.values.get("criticidade", "media"))
                 if tipo_item in tipos.TIPOS else None)
+    # o wizard só oferece o que o papel escreve: oferecer e recusar depois seria
+    # fazer a pessoa preencher um formulário para descobrir que não podia
+    quem = pessoa_atual()
+    meus_blocos = acesso.blocos_que_escreve(con, quem["id_pessoa"]) if quem else set()
+    blocos = {b: lista for b, lista in tipos.blocos().items() if b in meus_blocos}
     return render_template("wizard.html", tipo_item=tipo_item, pais=pais,
-                           squads=squads, blocos=tipos.blocos(), politica=politica,
-                           form=request.form, valores=request.values)
+                           squads=squads, blocos=blocos, politica=politica,
+                           form=request.form, valores=request.values,
+                           blocos_todos=tipos.blocos())
 
 
 # ------------------------------------------------------------------- visão 360

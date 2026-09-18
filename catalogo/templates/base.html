@@ -52,6 +52,9 @@
     {{ item_menu('web.caixa_notificacoes', 'notificacoes', 'Notificações', 'NT') }}
     {{ item_menu('web.perfil', 'perfil', 'Seu perfil', 'PF') }}
     <div class="grupo">Administração</div>
+    {% if pode('conceder') %}
+      {{ item_menu('web.acessos', 'acessos', 'Pleitos de acesso', 'PA') }}
+    {% endif %}
     {{ item_menu('web.politicas', 'politicas', 'Políticas', 'PO') }}
   </nav>
 

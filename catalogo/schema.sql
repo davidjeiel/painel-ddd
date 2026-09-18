@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS pessoa (
     perfil       TEXT NOT NULL DEFAULT 'consulta',  -- curador|arquiteto|tech_lead|negocio|consulta
     id_squad     INTEGER REFERENCES squad(id_squad),
     ativo        INTEGER NOT NULL DEFAULT 1,
+    unidade      TEXT,      -- código de 4 dígitos da unidade organizacional
     login             TEXT,      -- identificador usado na trilha de auditoria
     identidade_externa TEXT,     -- 'sub' do provedor quando houver SSO
     origem_identidade  TEXT NOT NULL DEFAULT 'local'  -- local|oidc|ldap
@@ -42,6 +43,26 @@ CREATE TABLE IF NOT EXISTS atribuicao_papel (
     concedido_por   TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_papel_pessoa ON atribuicao_papel(id_pessoa, fim_vigencia);
+
+-- Pleito de acesso: a pessoa se cadastra e pede um papel; quem concede é outro.
+-- O pleito não vira papel sozinho — é a atribuição acima que autoriza, e ela só
+-- nasce de uma decisão registrada aqui, com autor, data e resposta ao solicitante.
+CREATE TABLE IF NOT EXISTS solicitacao_acesso (
+    id_solicitacao  INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_pessoa       INTEGER NOT NULL REFERENCES pessoa(id_pessoa) ON DELETE CASCADE,
+    papel_pleiteado TEXT NOT NULL,
+    justificativa   TEXT,
+    status          TEXT NOT NULL DEFAULT 'pendente',  -- pendente|aprovada|negada
+    criado_em       TEXT NOT NULL DEFAULT (datetime('now')),
+    decidido_por    TEXT,
+    decidido_em     TEXT,
+    papel_concedido TEXT,        -- pode diferir do pleiteado: o aprovador ajusta
+    escopo_tipo     TEXT,        -- global|dominio|squad
+    escopo_id       INTEGER,
+    resposta        TEXT         -- o que o solicitante lê sobre o próprio pleito
+);
+CREATE INDEX IF NOT EXISTS ix_solicitacao_status
+    ON solicitacao_acesso(status, criado_em);
 
 -- ------------------------------------------------------------------- núcleo
 CREATE TABLE IF NOT EXISTS item_catalogo (

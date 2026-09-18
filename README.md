@@ -55,6 +55,13 @@ Quatro experiências nucleares, como recomendado na proposta:
 - **Grafo navegável** (`/ativo/<id>/grafo`) — vizinhança de 1 a 3 saltos sobre as relações
   transversais, em anéis por distância, com filtro por tipo e teto explícito: quando o
   recorte é cortado, a tela avisa em vez de mentir sobre o alcance da mudança.
+- **Cadastro e pleito de acesso** (`/acesso/solicitar`) — a única tela de escrita aberta
+  a quem ainda não tem papel: matrícula (uma letra e seis números), nome, e-mail,
+  unidade (quatro números) e o papel pleiteado. O cadastro não concede nada.
+- **Pleitos de acesso** (`/acessos`) — fila de quem pediu papel, para curador e
+  administrador: conceder o papel pedido, conceder outro ou negar, sempre com resposta
+  escrita, e com o alcance (global, um domínio ou uma squad) escolhido na concessão.
+  Só administrador concede o papel de administrador.
 - **Seu perfil** (`/perfil`) — quem assina as publicações e o modo de trabalho
   (edição ou leitura).
 - **Notificações** (`/notificacoes`) — caixa e preferências por evento e canal.
