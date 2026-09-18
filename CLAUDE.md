@@ -110,7 +110,9 @@ chama `criar_pessoa`/`entrar` de `tests/apoio.py` para simular sessão autentica
 já que rotas de escrita exigem pessoa + papel desde a fase 4. Arquivos organizados por
 frente, não por módulo: `test_governanca` (regras de publicação/ciclo de vida),
 `test_jornada` (navegação/UI), `test_fluxo` (fluxo de trabalho fim a fim),
-`test_acesso` (RBAC/fase 4), `test_escala` (descoberta automática, paginação, mapas).
+`test_acesso` (RBAC/fase 4), `test_escala` (descoberta automática, paginação, mapas), `test_cartilha`
+(a cartilha em `/cartilha`, e que suas tabelas continuam derivadas de `acesso.PERMISSOES`
+e da tabela de políticas, não copiadas à mão).
 
 ## Front-end
 

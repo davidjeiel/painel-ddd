@@ -70,6 +70,11 @@ Quatro experiências nucleares, como recomendado na proposta:
 - **Descobertas** (`/descobertas`) — importa contrato OpenAPI e inventário Git pela
   interface, com **prévia antes de gravar** e bandeja de triagem dos itens que a máquina
   trouxe: aceitar tira da bandeja sem mexer no cadastro, descartar arquiva.
+- **Cartilha de uso** (`/cartilha`) — guia por perfil: o que cada papel faz, o que a
+  ferramenta recusa e por quê, a rotina que resolve o dia e as tabelas de referência.
+  A matriz de permissões é lida de `acesso.PERMISSOES` e a tabela de ritos, das
+  políticas cadastradas — a página não consegue descrever regra que o sistema já não
+  aplica. Alcançável do rodapé de qualquer tela e do atalho ao lado da identificação.
 
 ### Aparência
 
