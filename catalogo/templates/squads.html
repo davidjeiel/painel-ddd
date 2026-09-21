@@ -4,49 +4,81 @@
 {% block conteudo %}
 <div class="cabecalho">
   <h1>Squads</h1>
-  <p>Cadastre os times responsáveis pelos ativos do catálogo.</p>
+  <p>Cadastre e mantenha os times responsáveis pelos ativos do catálogo.</p>
 </div>
 
-<div class="grade duas">
-  <div class="cartao">
-    <h2>Nova squad</h2>
-    <form method="post">
-      <div class="campo">
-        <label for="titulo">Título</label>
-        <input id="titulo" name="titulo" type="text" value="{{ form.get('titulo', '') }}" maxlength="120" required>
+<form class="busca-lista" method="get" action="{{ url_for('web.squads') }}" role="search">
+  <label for="busca-squads">Buscar squad</label>
+  <div class="acoes">
+    <input id="busca-squads" name="busca" type="search" value="{{ busca }}"
+           placeholder="Título, sigla ou descrição">
+    <button type="submit">Filtrar</button>
+    {% if busca %}<a class="botao secundario" href="{{ url_for('web.squads') }}">Limpar</a>{% endif %}
+  </div>
+</form>
+
+{% if detalhe %}
+  <div class="cartao" id="detalhe-squad">
+    <div class="pleito-cabeca">
+      <div>
+        <h2>Detalhes de {{ detalhe.nome }}</h2>
+        <p class="discreto mono">{{ detalhe.codigo }}</p>
       </div>
-      <div class="campo">
-        <label for="sigla">Sigla</label>
-        <input id="sigla" name="sigla" type="text" value="{{ form.get('sigla', '') }}" maxlength="20" required>
+      <a class="botao secundario" href="{{ url_for('web.squads', pagina=pagina, busca=busca) }}">Voltar à lista</a>
+    </div>
+    <form method="post" action="{{ url_for('web.editar_squad', id_squad=detalhe.id_squad) }}">
+      <div class="linha-campos">
+        <div class="campo"><label for="titulo-detalhe">Título</label><input id="titulo-detalhe" name="titulo" type="text" value="{{ detalhe.nome }}" maxlength="120" required></div>
+        <div class="campo"><label for="sigla-detalhe">Sigla</label><input id="sigla-detalhe" name="sigla" type="text" value="{{ detalhe.codigo }}" maxlength="20" required></div>
       </div>
-      <div class="campo">
-        <label for="descricao">Descrição</label>
-        <textarea id="descricao" name="descricao" maxlength="500" required>{{ form.get('descricao', '') }}</textarea>
+      <div class="campo"><label for="descricao-detalhe">Descrição</label><textarea id="descricao-detalhe" name="descricao" maxlength="500" required>{{ detalhe.descricao }}</textarea></div>
+      <div class="acoes">
+        <button type="submit">Salvar alterações</button>
+        {% if detalhe.ativo %}<button type="submit" class="secundario" formaction="{{ url_for('web.inativar_squad', id_squad=detalhe.id_squad) }}">Inativar squad</button>{% endif %}
       </div>
-      <button type="submit">Cadastrar squad</button>
     </form>
   </div>
+{% endif %}
 
-  <div class="cartao">
-    <h2>Squads cadastradas</h2>
-    {% if squads %}
-      <div class="rolagem">
-        <table>
-          <thead><tr><th>Título</th><th>Sigla</th><th>Descrição</th></tr></thead>
-          <tbody>
-          {% for squad in squads %}
-            <tr>
-              <td><strong>{{ squad.nome }}</strong></td>
-              <td><span class="mono">{{ squad.codigo }}</span></td>
-              <td>{{ squad.descricao }}</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="vazio">Nenhuma squad cadastrada.</p>
-    {% endif %}
-  </div>
+<div class="cartao">
+  <div class="pleito-cabeca"><h2>Squads cadastradas</h2><span class="discreto">{{ total }} registro(s)</span></div>
+  {% if squads %}
+    <div class="rolagem">
+      <table>
+        <thead><tr><th>Título</th><th>Sigla</th><th>Descrição</th><th>Situação</th><th>Ação</th></tr></thead>
+        <tbody>
+        {% for squad in squads %}
+          <tr>
+            <td><strong>{{ squad.nome }}</strong></td>
+            <td><span class="mono">{{ squad.codigo }}</span></td>
+            <td>{{ squad.descricao }}</td>
+            <td><span class="etiqueta {{ 'publicado' if squad.ativo else 'descontinuado' }}">{{ 'Ativa' if squad.ativo else 'Inativa' }}</span></td>
+            <td><a class="botao secundario" href="{{ url_for('web.squads', pagina=pagina, busca=busca, detalhe=squad.id_squad) }}">Detalhes</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="paginacao">
+      <p>Mostrando {{ (pagina - 1) * por_pagina + 1 }}–{{ [pagina * por_pagina, total]|min }} de <strong>{{ total }}</strong>.</p>
+      {% if paginas > 1 %}<nav class="paginas" aria-label="Paginação">
+        {% if pagina > 1 %}<a href="{{ url_for('web.squads', pagina=pagina - 1, busca=busca) }}">Anterior</a>{% endif %}
+        <span class="discreto">Página {{ pagina }} de {{ paginas }}</span>
+        {% if pagina < paginas %}<a href="{{ url_for('web.squads', pagina=pagina + 1, busca=busca) }}">Próxima</a>{% endif %}
+      </nav>{% endif %}
+    </div>
+  {% else %}<p class="vazio">Nenhuma squad encontrada.</p>{% endif %}
+</div>
+
+<div class="cartao">
+  <h2>Nova squad</h2>
+  <form method="post">
+    <div class="linha-campos">
+      <div class="campo"><label for="titulo">Título</label><input id="titulo" name="titulo" type="text" value="{{ form.get('titulo', '') }}" maxlength="120" required></div>
+      <div class="campo"><label for="sigla">Sigla</label><input id="sigla" name="sigla" type="text" value="{{ form.get('sigla', '') }}" maxlength="20" required></div>
+    </div>
+    <div class="campo"><label for="descricao">Descrição</label><textarea id="descricao" name="descricao" maxlength="500" required>{{ form.get('descricao', '') }}</textarea></div>
+    <button type="submit">Cadastrar squad</button>
+  </form>
 </div>
 {% endblock %}

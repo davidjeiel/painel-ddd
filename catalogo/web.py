@@ -444,10 +444,60 @@ def squads():
                 flash("Squad cadastrada.", "ok")
                 return redirect(url_for("web.squads"))
 
-    squads_cadastradas = [dict(l) for l in con.execute(
-        "SELECT * FROM squad WHERE ativo = 1 ORDER BY nome")]
-    return render_template("squads.html", squads=squads_cadastradas,
-                           form=request.form)
+    busca = request.args.get("busca", "").strip()
+    sql = "SELECT * FROM squad"
+    params = []
+    if busca:
+        sql += (" WHERE LOWER(COALESCE(nome, '')) LIKE LOWER(?)"
+                " OR LOWER(COALESCE(codigo, '')) LIKE LOWER(?)"
+                " OR LOWER(COALESCE(descricao, '')) LIKE LOWER(?)")
+        params = [f"%{busca}%"] * 3
+    sql += " ORDER BY ativo DESC, nome"
+    todas = [dict(l) for l in con.execute(sql, params)]
+    total = len(todas)
+    paginas = max(1, -(-total // POR_PAGINA_GESTAO))
+    pagina = min(max(1, request.args.get("pagina", 1, type=int)), paginas)
+    inicio = (pagina - 1) * POR_PAGINA_GESTAO
+    detalhe_id = request.args.get("detalhe", type=int)
+    detalhe = next((s for s in todas if s["id_squad"] == detalhe_id), None)
+    return render_template(
+        "squads.html", squads=todas[inicio:inicio + POR_PAGINA_GESTAO],
+        detalhe=detalhe, busca=busca, pagina=pagina, paginas=paginas,
+        total=total, por_pagina=POR_PAGINA_GESTAO, form=request.form)
+
+
+@bp.route("/squads/<int:id_squad>/editar", methods=["POST"])
+@exige("conceder")
+def editar_squad(id_squad: int):
+    titulo = request.form.get("titulo", "").strip()
+    sigla = request.form.get("sigla", "").strip().upper()
+    descricao = request.form.get("descricao", "").strip()
+    if not titulo or not sigla or not descricao:
+        flash("Título, sigla e descrição são obrigatórios.", "erro")
+    elif len(sigla) > 20:
+        flash("A sigla deve ter no máximo 20 caracteres.", "erro")
+    else:
+        try:
+            con = get_db()
+            con.execute("UPDATE squad SET nome = ?, codigo = ?, descricao = ? "
+                        "WHERE id_squad = ?",
+                        (titulo, sigla, descricao, id_squad))
+            con.commit()
+        except sqlite3.IntegrityError:
+            flash("Já existe uma squad com essa sigla.", "erro")
+        else:
+            flash("Squad atualizada.", "ok")
+    return redirect(url_for("web.squads", detalhe=id_squad))
+
+
+@bp.route("/squads/<int:id_squad>/inativar", methods=["POST"])
+@exige("conceder")
+def inativar_squad(id_squad: int):
+    con = get_db()
+    con.execute("UPDATE squad SET ativo = 0 WHERE id_squad = ?", (id_squad,))
+    con.commit()
+    flash("Squad inativada. Os vínculos existentes foram preservados.", "ok")
+    return redirect(url_for("web.squads"))
 
 
 # ------------------------------------------------------------- notificações

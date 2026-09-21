@@ -10,12 +10,53 @@ from datetime import date, timedelta
 
 from . import servicos
 
+# Squads ativas no arquivo Squads.csv. O título exibido no catálogo usa o
+# Nome Curto; a descrição preserva o contexto do Título original.
 SQUADS = [
-    ("SQ-CRE", "Squad Crédito", "Tribo Originação"),
-    ("SQ-CTR", "Squad Contrato", "Tribo Originação"),
-    ("SQ-GAR", "Squad Garantias", "Tribo Risco"),
-    ("SQ-LEG", "Core Legacy", "Tribo Plataforma"),
+    ("NM175", "Interface Regulatória", "NM175 - Interface Regulatória - SIACI"),
+    ("NM176", "Fundos, Seguros e Componentes", "NM176 - Fundos, Seguros e Componentes - SIACI"),
+    ("NM177", "Contábil e FCVS", "NM177 - Contábil e FCVS - SIACI"),
+    ("NM178", "Cobrança e Inadimplência", "NM178 - Cobrança e Inadimplência - SIACI"),
+    ("NM179", "Construção", "NM179 - Construção - SIACI"),
+    ("NM180", "Portais e Serviços", "NM180 - Portais e Serviços - SIACI"),
+    ("NM181", "Evolução Rotinas Críticas", "NM181 - Evolução Rotinas Críticas"),
+    ("NM182", "Gestão da Originação e Entrada de Dados", "NM182 - Gestão da Originação e Integração"),
+    ("NM183", "Jornada Backoffice - SISPH", "NM183 - Jornada Backoffice - SISPH"),
+    ("NM184", "Jornada Baixa de Garantias - SISPH", "NM184 - Jornada Baixa de Garantias - SISPH"),
+    ("NM185", "Plataforma Habitação", "NM185 - Plataforma Habitação - SISPH"),
+    ("NM186", "Manual do Usuário - SIACI", "NM186 - Manual do Usuário - SIACI"),
+    ("NM187", "Informações Gerenciais", "NM187 - Informações Gerenciais"),
+    ("NM188", "Sustentação 2", "NM188 - Sustentação 2 - SIACI"),
+    ("NM189", "POG, GRF e IR", "NM189 - POG, GRF e IR - SIACI"),
+    ("NM190", "Estoque e Execução", "NM190 - Estoque e Execução"),
+    ("NM191", "Sustentação 3", "NM191 - Sustentação 3"),
+    ("NM192", "Backoffice e Serviços", "NM192 - Backoffice e Serviços - SIACI"),
+    ("NM193", "Evolução Rotinas Específicas", "NM193 - Evolução - Online/Baixa Plataforma"),
+    ("NM194", "Originação - Parâmetros e Integração", "NM194 - Entrada de Dados e Parâmetros"),
+    ("NM195", "Apoio ao Desenvolvimento (G3)", "NM195 - Apoio ao Desenvolvimento (G3) - SIACI"),
+    ("NM196", "Inteligência Artificial da Habitação - SIIAH", "NM196 - Inteligência Artificial da Habitação - SIIAH"),
+    ("NM204", "Serviços de Sustentação 1 G2", "NM204 - Serviços de Sustentação 1 (G2) - SIACI"),
+    ("NM205", "Jornada - SISPH", "NM205 - Jornada - SISPH"),
+    ("NM206", "Apoio ao Desenvolvimento (G3)", "NM206 - Apoio ao Desenvolvimento (G3) - Negocial - SIACI"),
+    ("NM208", "APIs .NET", "NM208 - APIs .NET"),
+    ("NM209", "API JAVA", "NM209 - APIs JAVA"),
+    ("NM210", "Débito Técnico .NET", "NM210 - Débito Técnico .NET"),
+    ("NM211", "Débito Técnico Java", "NM211 - Débito Técnico Java"),
+    ("NM212", "INTERNALIZAÇÃO LEGADO - .NET", "NM212 - INTERNALIZAÇÃO LEGADO - .NET"),
+    ("NM213", "INTERNALIZAÇÃO SIACI - .NET", "NM213 - INTERNALIZAÇÃO SIACI - .NET"),
+    ("NM214", "INTERNALIZAÇÃO LEGADO - JAVA", "NM214 - INTERNALIZAÇÃO LEGADO - JAVA"),
+    ("NM215", "INTERNALIZAÇÃO SIACI - JAVA", "NM215 - INTERNALIZAÇÃO SIACI - JAVA"),
+    ("NM216", "Sustentação 4", "NM216 - Sustentação 4 - SIACI"),
+    ("Teste", "Time", "Time Teste"),
 ]
+
+# Correspondência das squads usadas pelo cenário piloto com a taxonomia real.
+SQUAD_PILOTO = {
+    "SQ-CRE": "NM182",
+    "SQ-CTR": "NM175",
+    "SQ-GAR": "NM185",
+    "SQ-LEG": "NM204",
+}
 
 PESSOAS = [
     ("M1001", "Ana Torres", "ana.torres@exemplo.com.br", "negocio", "SQ-CTR"),
@@ -30,15 +71,20 @@ PESSOAS = [
 
 def carregar(con) -> dict:
     ids_squad = {}
-    for codigo, nome, tribo in SQUADS:
+    for codigo, nome, descricao in SQUADS:
         cur = con.execute(
-            "INSERT OR IGNORE INTO squad (codigo, nome, tribo) VALUES (?,?,?)",
-            (codigo, nome, tribo))
-        ids_squad[codigo] = cur.lastrowid or con.execute(
+            "INSERT INTO squad (codigo, nome, descricao) VALUES (?,?,?) "
+            "ON CONFLICT(codigo) DO UPDATE SET nome = excluded.nome, "
+            "descricao = excluded.descricao, ativo = 1",
+            (codigo, nome, descricao))
+        ids_squad[codigo] = con.execute(
             "SELECT id_squad FROM squad WHERE codigo = ?", (codigo,)).fetchone()[0]
+    for legado, codigo in SQUAD_PILOTO.items():
+        ids_squad[legado] = ids_squad[codigo]
 
     ids_pessoa = {}
     for matricula, nome, email, perfil, squad in PESSOAS:
+        squad = SQUAD_PILOTO[squad]
         login = email.split("@")[0]
         cur = con.execute(
             "INSERT OR IGNORE INTO pessoa (matricula, nome, email, perfil, id_squad,"
