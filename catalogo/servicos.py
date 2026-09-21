@@ -934,6 +934,61 @@ def posicionar_vizinhanca(dados: dict, largura: int = 900, altura: int = 560) ->
             "largura": largura, "altura": altura}
 
 
+def grafo_catalogo(con, id_dominio: int | None = None,
+                   id_subdominio: int | None = None,
+                   id_item: int | None = None,
+                   largura: int = 900, altura: int = 520) -> dict:
+    """Exibe todos os ativos ou apenas os descendentes de um recorte."""
+    def descendentes(raiz: int) -> set[int]:
+        return {linha["id_item"] for linha in con.execute(
+            "WITH RECURSIVE descendentes(id_item) AS ("
+            "SELECT id_item FROM item_catalogo WHERE id_item = ? "
+            "UNION ALL SELECT i.id_item FROM item_catalogo i "
+            "JOIN descendentes d ON i.id_pai = d.id_item) "
+            "SELECT id_item FROM descendentes", (raiz,))}
+
+    escopos = [descendentes(raiz) for raiz in
+               (id_item or id_dominio, id_subdominio) if raiz]
+    escopo = set.intersection(*escopos) if escopos else None
+    if escopo is None:
+        escopo = {linha["id_item"] for linha in con.execute(
+            "SELECT id_item FROM item_catalogo WHERE status_ciclo_vida != 'arquivado'")}
+    marcas = ",".join("?" for _ in escopo)
+    nos = [dict(l) for l in con.execute(
+        "SELECT id_item, id_pai, tipo_item, nome, codigo, criticidade "
+        "FROM item_catalogo WHERE status_ciclo_vida != 'arquivado' "
+        f"AND id_item IN ({marcas}) ORDER BY tipo_item, nome", list(escopo))]
+    if not nos:
+        return {"nos": [], "arestas": [], "largura": largura,
+                "altura": altura, "expandido": True}
+
+    cx, cy = largura / 2, altura / 2
+    rx, ry = largura / 2 - 80, altura / 2 - 75
+    posicoes = {}
+    for indice, no in enumerate(nos):
+        angulo = 2 * math.pi * indice / len(nos) - math.pi / 2
+        posicoes[no["id_item"]] = (cx + rx * math.cos(angulo),
+                                    cy + ry * math.sin(angulo))
+        no["x"], no["y"] = (round(posicoes[no["id_item"]][0], 1),
+                              round(posicoes[no["id_item"]][1], 1))
+    arestas = [{"id_origem": no["id_pai"], "id_destino": no["id_item"],
+                "tipo_relacao": "hierarquia", "criticidade": "",
+                "mecanismo": "pai/filho"}
+               for no in nos if no["id_pai"] in posicoes]
+    arestas.extend(dict(l) for l in con.execute(
+        "SELECT r.id_origem, r.id_destino, r.tipo_relacao, r.criticidade, "
+        "r.mecanismo FROM relacionamento_ativo r "
+        f"WHERE r.fim_vigencia IS NULL AND r.id_origem IN ({marcas}) "
+        f"AND r.id_destino IN ({marcas}) ORDER BY r.tipo_relacao", [*escopo, *escopo]))
+    for aresta in arestas:
+        x1, y1 = posicoes[aresta["id_origem"]]
+        x2, y2 = posicoes[aresta["id_destino"]]
+        aresta.update(x1=round(x1, 1), y1=round(y1, 1),
+                      x2=round(x2, 1), y2=round(y2, 1))
+    return {"nos": nos, "arestas": arestas, "largura": largura,
+            "altura": altura, "expandido": True}
+
+
 def analise_impacto(con, id_item: int) -> dict:
     """Quem depende deste ativo, agrupado — não só a contagem do cartão final."""
     consumidores = governanca.impacto_descontinuacao(con, id_item)

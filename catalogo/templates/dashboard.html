@@ -44,6 +44,70 @@
     {{ delta('pendencias', invertido=true) }}</a>
 </div>
 
+<div class="cartao grafo-resumo">
+  <div class="pleito-cabeca">
+    <div>
+      <h2>Exposição do catálogo</h2>
+      <p class="discreto">{{ 'Ativos e relações do recorte selecionado.' if (filtro_dominio or filtro_subdominio or request.args.get('id_item')) else 'Todos os ativos e suas relações.' }}</p>
+    </div>
+    <a class="botao secundario" href="{{ url_for('web.catalogo') }}">Ver catálogo</a>
+  </div>
+  <form method="get" class="linha-campos filtros grafo-filtros" aria-label="Filtrar exposição do catálogo">
+    <div class="campo">
+      <label for="filtro-dominio">Domínio</label>
+      <select id="filtro-dominio" name="id_dominio">
+        <option value="">Todos os domínios</option>
+        {% for dominio in dominios_grafo %}
+          <option value="{{ dominio.id_item }}" {{ 'selected' if filtro_dominio == dominio.id_item }}>{{ dominio.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="filtro-subdominio">Subdomínio</label>
+      <select id="filtro-subdominio" name="id_subdominio">
+        <option value="">Todos os subdomínios</option>
+        {% for subdominio in subdominios_grafo %}
+          <option value="{{ subdominio.id_item }}" {{ 'selected' if filtro_subdominio == subdominio.id_item }}>{{ subdominio.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo acoes">
+      <button type="submit">Aplicar filtros</button>
+      {% if filtro_dominio or filtro_subdominio %}<a class="botao secundario" href="{{ url_for('web.dashboard') }}">Limpar</a>{% endif %}
+    </div>
+  </form>
+  {% if grafo_catalogo.nos %}
+    <div class="rolagem">
+      <svg class="grafo resumo" viewBox="0 0 {{ grafo_catalogo.largura }} {{ grafo_catalogo.altura }}"
+           role="img" aria-labelledby="grafo-resumo-descricao">
+        <title id="grafo-resumo-descricao">{{ 'Ativos do recorte selecionado' if grafo_catalogo.expandido else 'Relações entre tipos de ativos do catálogo' }}</title>
+        <defs><marker id="ponta-resumo" viewBox="0 0 10 10" refX="10" refY="5"
+                      markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--linha-forte)" />
+        </marker></defs>
+        {% for a in grafo_catalogo.arestas %}
+          <line class="aresta {{ 'hierarquia' if a.tipo_relacao == 'hierarquia' }}" x1="{{ a.x1 }}" y1="{{ a.y1 }}" x2="{{ a.x2 }}" y2="{{ a.y2 }}"
+                marker-end="url(#ponta-resumo)"><title>{{ a.tipo_relacao }}{{ ': ' ~ a.total if a.total else '' }}</title></line>
+        {% endfor %}
+        {% for n in grafo_catalogo.nos %}
+          <a href="{{ url_for('web.dashboard', id_item=n.id_item) }}">
+            <g class="no-grafo resumo-no">
+              <circle class="{{ n.criticidade if grafo_catalogo.expandido else '' }}" cx="{{ n.x }}" cy="{{ n.y }}"
+                      r="{{ 10 if grafo_catalogo.expandido else 20 + (n.total / 8 if n.total < 80 else 10) }}"></circle>
+              <text x="{{ n.x }}" y="{{ n.y - (16 if grafo_catalogo.expandido else 30) }}" text-anchor="middle">{{ n.nome if grafo_catalogo.expandido else n.tipo_item|rotulo_tipo }}</text>
+              {% if grafo_catalogo.expandido %}<title>{{ n.nome }} · {{ n.tipo_item|rotulo_tipo }} · {{ n.codigo }}</title>
+              {% else %}<text class="contagem" x="{{ n.x }}" y="{{ n.y + 5 }}" text-anchor="middle">{{ n.total }}</text><title>{{ n.tipo_item|rotulo_tipo }}: {{ n.total }} ativo(s)</title>{% endif %}
+            </g>
+          </a>
+        {% endfor %}
+      </svg>
+    </div>
+    <div class="legenda-grafo"><span class="discreto">Cada nó representa um ativo. Clique para recortar o gráfico pelos subitens vinculados. As setas mostram relações vigentes.</span></div>
+  {% else %}
+    <p class="vazio">Nenhum ativo cadastrado para exibir.</p>
+  {% endif %}
+</div>
+
 <div class="grade duas" style="margin-top:16px">
   <div class="cartao">
     <h2>Cobertura de capacidades por domínio</h2>

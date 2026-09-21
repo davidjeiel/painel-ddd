@@ -183,9 +183,27 @@ def contexto():
 @bp.route("/")
 def dashboard():
     con = get_db()
+    id_dominio = request.args.get("id_dominio", type=int)
+    id_subdominio = request.args.get("id_subdominio", type=int)
+    id_item = request.args.get("id_item", type=int)
+    dominios = [dict(l) for l in con.execute(
+        "SELECT id_item, nome FROM item_catalogo WHERE tipo_item = 'dominio' "
+        "ORDER BY nome")]
+    if id_dominio:
+        subdominios = [dict(l) for l in con.execute(
+            "SELECT id_item, nome, id_pai FROM item_catalogo "
+            "WHERE tipo_item = 'subdominio' AND id_pai = ? ORDER BY nome",
+            (id_dominio,))]
+    else:
+        subdominios = [dict(l) for l in con.execute(
+            "SELECT id_item, nome, id_pai FROM item_catalogo "
+            "WHERE tipo_item = 'subdominio' ORDER BY nome")]
     return render_template(
         "dashboard.html",
         kpis=servicos.indicadores(con),
+        grafo_catalogo=servicos.grafo_catalogo(con, id_dominio, id_subdominio, id_item),
+        dominios_grafo=dominios, subdominios_grafo=subdominios,
+        filtro_dominio=id_dominio, filtro_subdominio=id_subdominio,
         variacao=servicos.variacao_indicadores(con),
         cobertura=servicos.cobertura_por_dominio(con),
         pendencias=servicos.pendencias_prioritarias(con),
