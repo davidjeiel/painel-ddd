@@ -1,83 +1,101 @@
-{% extends "base.html" %}
+  {% extends "base.html" %}
 {% block titulo %}Cartilha — como usar o catálogo{% endblock %}
 
 {% block conteudo %}
 <div class="cabecalho">
-  <h1>Cartilha do catálogo</h1>
-  <p>Cada papel tem um trabalho, e a ferramenta só mostra o seu. Aqui está o que você
-     consegue fazer, o que ela vai recusar e por quê — e a rotina que resolve o seu dia.</p>
+  <h1>O fluxo de cada perfil</h1>
+  <p>O papel autoriza a ação e o objeto: quem conhece o negócio nomeia o significado,
+     quem conhece a tecnologia registra a realidade, e ninguém aprova o que escreveu.
+     Escolha um perfil e toque nas etapas para ver o que ele faz do cadastro à publicação.</p>
 </div>
 
-<nav class="atalhos-perfil" aria-label="Ir para o seu perfil">
+<div class="grade kpis">
+  <div class="kpi"><span class="rotulo">Papéis</span><span class="valor">{{ perfis|length }}</span></div>
+  <div class="kpi"><span class="rotulo">Tipos de ativo</span><span class="valor">{{ total_tipos }}</span></div>
+  <div class="kpi"><span class="rotulo">Etapas de validação</span><span class="valor">{{ etapa_rotulo|length }}</span></div>
+  <div class="kpi"><span class="rotulo">Hierarquias</span><span class="valor">2</span></div>
+</div>
+
+<div class="seg" id="seg-perfis" role="tablist" aria-label="Escolha o perfil">
+  <span class="seg-pill" id="seg-pill" aria-hidden="true"></span>
   {% for p in perfis %}
-    <a class="cartao-perfil {{ p.chave }}" href="#{{ p.chave }}">
-      <span class="papel">{{ p.rotulo }}</span>
-      <span class="lema">{{ p.lema }}</span>
-    </a>
+    <a class="tab{{ ' ativo' if loop.first }}" data-tom="perfil-{{ p.chave }}"
+       href="#{{ p.chave }}" role="tab"
+       aria-selected="{{ 'true' if loop.first else 'false' }}">{{ p.rotulo }}</a>
   {% endfor %}
-</nav>
-
-<div class="cartao" id="comum">
-  <h2>Os primeiros cinco minutos</h2>
-  <p class="discreto">Vale para qualquer papel. Faça isto uma vez e o resto da cartilha
-     faz sentido.</p>
-  <ol class="passos-guia">
-    {% for passo in primeiros_passos %}
-      <li>
-        <h3>{{ passo.titulo }}</h3>
-        <p>{{ passo.texto|safe }}</p>
-        {% if passo.extra %}<p class="discreto">{{ passo.extra|safe }}</p>{% endif %}
-      </li>
-    {% endfor %}
-  </ol>
-
-  <h3>Duas regras que valem para todo mundo</h3>
-  <div class="grade duas-iguais">
-    {% for titulo, texto in regras %}
-      <div class="regra">
-        <strong>{{ titulo }}.</strong> {{ texto }}
-      </div>
-    {% endfor %}
-  </div>
 </div>
 
-{% for p in perfis %}
-  <div class="cartao perfil {{ p.chave }}" id="{{ p.chave }}">
-    <div class="perfil-cabeca">
-      <h2>{{ p.rotulo }}</h2>
-      <code class="mono">{{ p.papel }}</code>
-    </div>
-    <p class="lema-longo"><strong>{{ p.lema }}:</strong> {{ p.resumo }}</p>
-
-    {% if p.faz or p.recusa %}
-      <div class="grade duas-iguais">
-        <div>
-          <h3>O que você faz</h3>
-          <ul class="pode">
-            {% for item in p.faz %}<li>{{ item|safe }}</li>{% endfor %}
-          </ul>
-        </div>
-        <div>
-          <h3>O que a ferramenta recusa</h3>
-          <ul class="naopode">
-            {% for texto, porque in p.recusa %}
-              <li>{{ texto }}{% if porque %}<span class="porque">{{ porque }}</span>{% endif %}</li>
-            {% endfor %}
-          </ul>
-        </div>
+<div id="perfis-lista">
+  {% for p in perfis %}
+    <section class="cartao perfil {{ p.chave }}{{ ' ativo' if loop.first }}" id="{{ p.chave }}">
+      <div class="perfil-cabeca">
+        <h2>{{ p.rotulo }}</h2>
+        <code class="mono">{{ p.papel }}</code>
       </div>
-    {% endif %}
+      <p class="lema-longo"><strong>{{ p.lema }}:</strong> {{ p.resumo }}</p>
 
-    <h3>{{ p.rotina_titulo }}</h3>
-    <ol class="rotina">
-      {% for texto, onde in p.rotina %}
-        <li>{{ texto|safe }}{% if onde %}<span class="onde">{{ onde }}</span>{% endif %}</li>
-      {% endfor %}
-    </ol>
+      {% if p.faz or p.recusa %}
+        <div class="chips">
+          {% for item in p.faz %}<span class="chip">{{ item|safe }}</span>{% endfor %}
+          {% for texto, porque in p.recusa %}<span class="chip off">{{ texto }} · não</span>{% endfor %}
+        </div>
+      {% endif %}
 
-    <p class="nota">{{ p.nota|safe }}</p>
+      <h3>{{ p.rotina_titulo }}</h3>
+      <ol class="jornada">
+        {% for passo in fluxos.get(p.chave, []) %}
+          <li class="no">
+            <button type="button" class="no-cabeca" aria-expanded="false">
+              <span class="no-numero" aria-hidden="true">{{ loop.index }}</span>
+              <span class="no-corpo">
+                <span class="no-etapa">{{ passo.etapa }}</span>
+                <span class="no-papel">{{ passo.papel }}</span>
+                <span class="no-acao">{{ passo.acao }}</span>
+              </span>
+              <span class="no-mais" aria-hidden="true"></span>
+            </button>
+            <div class="no-revela"><div>
+              <ul class="no-detalhes">
+                {% for d in passo.detalhes %}<li>{{ d|safe }}</li>{% endfor %}
+              </ul>
+              {% if passo.atencao %}<p class="nota"><strong>Limite do papel:</strong> {{ passo.atencao|safe }}</p>{% endif %}
+            </div></div>
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
+  {% endfor %}
+</div>
+
+<div class="cartao" id="ritos">
+  <h2>O rito de cada tipo de ativo</h2>
+  <p class="discreto">Governança proporcional ao risco: a política do tipo e da criticidade
+     define as etapas, as evidências, a nota mínima, o prazo por etapa e a periodicidade de
+     revalidação — <a href="{{ url_for('web.politicas') }}">a mesma que a tela de políticas
+     mostra</a>. É dado, não código: ajustar uma linha vale imediatamente para todo o acervo
+     daquele tipo.</p>
+  <div class="rolagem">
+    <table>
+      <thead><tr><th>Tipo</th><th>Criticidade</th><th>Etapas de validação</th>
+                 <th>Evidências</th><th>Nota mínima</th><th>Prazo/etapa</th>
+                 <th>Revalidar</th></tr></thead>
+      <tbody>
+        {% for r in ritos %}
+          <tr><td>{{ r.tipo_item|rotulo_tipo }}</td>
+              <td>{{ r.criticidade }}</td>
+              <td>{% for e in r.etapas %}<span class="et {{ e.classe }}">{{ e.rotulo|lower }}</span>{% endfor %}</td>
+              <td>{{ r.evidencia_minima or '—' }}</td>
+              <td>{{ r.score_minimo }}%</td>
+              <td>{{ r.sla_horas }}h</td>
+              <td>{{ r.periodicidade_revisao_dias }} dias</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-{% endfor %}
+  <p class="nota"><strong>Marcar um ativo como crítico aperta o rito de verdade</strong>:
+    mais uma etapa, mais uma evidência, nota mais alta e metade do prazo. Quem decide uma
+    etapa precisa do papel daquela etapa — ou ser o responsável formal pelo ativo.</p>
+</div>
 
 <div class="cartao" id="referencia">
   <h2>Quem pode fazer o quê</h2>
@@ -104,37 +122,32 @@
   </div>
   <p class="nota"><strong>“Decidir validação” é permissão para entrar na fila</strong> —
     qual etapa você decide depende do papel: <em>negocial</em> exige negócio,
-    <em>técnica</em> exige tech lead, <em>arquitetural</em> exige arquiteto. Admin decide
-    qualquer uma. E em qualquer caso, o <strong>responsável formal</strong> do ativo pode
-    decidir a etapa correspondente ao papel que exerce sobre ele.</p>
+    <em>técnica</em> exige time técnico, <em>arquitetural</em> exige arquiteto. Admin decide
+    qualquer uma.</p>
 </div>
 
-<div class="cartao" id="ritos">
-  <h2>O rito de cada tipo de ativo</h2>
-  <p class="discreto">Governança proporcional: um endpoint não passa pelo mesmo rito de um
-     contexto delimitado. Quem define é a política do tipo e da criticidade —
-     <a href="{{ url_for('web.politicas') }}">a mesma que a tela de políticas mostra</a>.</p>
-  <div class="rolagem">
-    <table>
-      <thead><tr><th>Tipo</th><th>Criticidade</th><th>Etapas de validação</th>
-                 <th>Evidências</th><th>Score mínimo</th><th>Prazo por etapa</th>
-                 <th>Revisar a cada</th></tr></thead>
-      <tbody>
-        {% for r in ritos %}
-          <tr><td>{{ r.tipo_item|rotulo_tipo }}</td>
-              <td>{{ r.criticidade }}</td>
-              <td>{{ r.etapas|join(' → ') }}</td>
-              <td>{{ r.evidencia_minima or '—' }}</td>
-              <td>{{ r.score_minimo }}%</td>
-              <td>{{ r.sla_horas }}h</td>
-              <td>{{ r.periodicidade_revisao_dias }} dias</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="cartao" id="comum">
+  <h2>Os primeiros cinco minutos</h2>
+  <p class="discreto">Vale para qualquer papel. Faça isto uma vez e o resto da cartilha
+     faz sentido.</p>
+  <ol class="passos-guia">
+    {% for passo in primeiros_passos %}
+      <li>
+        <h3>{{ passo.titulo }}</h3>
+        <p>{{ passo.texto|safe }}</p>
+        {% if passo.extra %}<p class="discreto">{{ passo.extra|safe }}</p>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+
+  <h3>Duas regras que valem para todo mundo</h3>
+  <div class="grade duas-iguais">
+    {% for titulo, texto in regras %}
+      <div class="regra">
+        <strong>{{ titulo }}.</strong> {{ texto }}
+      </div>
+    {% endfor %}
   </div>
-  <p class="nota"><strong>Marcar um ativo como crítico aperta o rito de verdade</strong>:
-    mais uma etapa, mais uma evidência, score mais alto e metade do prazo. Use a
-    criticidade pelo risco real, não por importância percebida.</p>
 </div>
 
 <div class="cartao" id="duvidas">
@@ -149,7 +162,77 @@
 </div>
 
 <p class="discreto rodape-cartilha">
-  A matriz de permissões desta página é lida de <code class="mono">catalogo/acesso.py</code>
-  e a tabela de ritos, das políticas cadastradas — mudou a regra, mudou a cartilha.
+  A matriz de permissões desta página é lida de <code class="mono">catalogo/acesso.py</code>,
+  a trilha de etapas de <code class="mono">catalogo/cartilha.py</code> e a tabela de ritos,
+  das políticas cadastradas — mudou a regra, mudou a cartilha.
 </p>
+
+<script>
+(function () {
+  var seg = document.getElementById('seg-perfis');
+  var pill = document.getElementById('seg-pill');
+  var lista = document.getElementById('perfis-lista');
+  if (!seg || !pill || !lista) { return; }
+  var abas = Array.prototype.slice.call(seg.querySelectorAll('.tab'));
+  var secoes = Array.prototype.slice.call(lista.querySelectorAll('.cartao.perfil'));
+
+  function corDaAba(aba) {
+    var tokenCss = getComputedStyle(document.documentElement)
+      .getPropertyValue('--' + aba.dataset.tom).trim();
+    return tokenCss || null;
+  }
+
+  function mover(aba) {
+    pill.style.width = aba.offsetWidth + 'px';
+    pill.style.transform = 'translateX(' + aba.offsetLeft + 'px)';
+    var cor = corDaAba(aba);
+    if (cor) { pill.style.background = cor; }
+  }
+
+  function marcar(chave, rolar) {
+    abas.forEach(function (a) {
+      var ativa = a.getAttribute('href') === '#' + chave;
+      a.classList.toggle('ativo', ativa);
+      a.setAttribute('aria-selected', ativa ? 'true' : 'false');
+      if (ativa) { mover(a); }
+    });
+    secoes.forEach(function (s) {
+      s.classList.toggle('ativo', s.id === chave);
+    });
+    if (rolar) {
+      var alvo = document.getElementById(chave);
+      if (alvo) { alvo.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+    }
+  }
+
+  lista.classList.add('abas-ativas');
+  abas.forEach(function (aba) {
+    aba.addEventListener('click', function (e) {
+      e.preventDefault();
+      marcar(aba.getAttribute('href').slice(1), true);
+    });
+  });
+
+  lista.addEventListener('click', function (e) {
+    var botao = e.target.closest('.no-cabeca');
+    if (!botao) { return; }
+    var no = botao.closest('.no');
+    var abrir = !no.classList.contains('aberto');
+    no.classList.toggle('aberto', abrir);
+    botao.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  });
+
+  window.addEventListener('resize', function () {
+    var atual = seg.querySelector('.tab.ativo') || abas[0];
+    if (atual) { mover(atual); }
+  });
+
+  if (abas.length) { marcar(abas[0].getAttribute('href').slice(1), false); }
+
+  var hash = window.location.hash.slice(1);
+  if (hash && secoes.some(function (s) { return s.id === hash; })) {
+    marcar(hash, true);
+  }
+})();
+</script>
 {% endblock %}

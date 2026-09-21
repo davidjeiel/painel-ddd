@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block titulo %}Gestão de acessos{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Gestão de acessos</h1>
+  <p>Consulte os cadastrados, veja detalhes e inative acessos individualmente ou em lote.</p>
+</div>
+
+<form class="busca-lista" method="get" action="{{ url_for('web.gestao_acessos') }}" role="search">
+  <label for="busca-cadastros">Buscar cadastro</label>
+  <div class="acoes">
+    <input id="busca-cadastros" name="busca" type="search" value="{{ busca }}"
+           placeholder="Nome, matrícula, e-mail, unidade, perfil ou squad">
+    <button type="submit">Filtrar</button>
+    {% if busca %}<a class="botao secundario" href="{{ url_for('web.gestao_acessos') }}">Limpar</a>{% endif %}
+  </div>
+</form>
+
+{% if detalhe %}
+  <div class="cartao" id="detalhe-pessoa">
+    <div class="pleito-cabeca">
+      <div>
+        <h2>Detalhes de {{ detalhe.nome }}</h2>
+        <p class="discreto mono">{{ detalhe.matricula }} · {{ detalhe.login or 'sem login' }}</p>
+      </div>
+      <a class="botao secundario" href="{{ url_for('web.gestao_acessos', pagina=pagina, busca=busca) }}">Voltar à lista</a>
+    </div>
+    <form method="post" action="{{ url_for('web.editar_pessoa', id_pessoa=detalhe.id_pessoa) }}">
+      <div class="linha-campos">
+        <div class="campo"><label for="nome-detalhe">Nome</label><input id="nome-detalhe" name="nome" type="text" value="{{ detalhe.nome }}" required></div>
+        <div class="campo"><label for="email-detalhe">E-mail</label><input id="email-detalhe" name="email" type="text" value="{{ detalhe.email or '' }}"></div>
+        <div class="campo"><label for="unidade-detalhe">Unidade</label><input id="unidade-detalhe" name="unidade" type="text" value="{{ detalhe.unidade or '' }}"></div>
+        <div class="campo">
+          <label for="squad-detalhe">Squad</label>
+          <select id="squad-detalhe" name="id_squad"><option value="">Sem squad</option>
+            {% for squad in squads %}<option value="{{ squad.id_squad }}" {{ 'selected' if detalhe.id_squad == squad.id_squad }}>{{ squad.nome }} ({{ squad.codigo }})</option>{% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="papel-detalhe">Perfil</label>
+          <select id="papel-detalhe" name="papel">
+            {% for chave, rotulo in papeis.items() %}<option value="{{ chave }}" {{ 'selected' if detalhe.perfil == chave }}>{{ rotulo }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <input type="hidden" name="ativo" value="{{ '1' if detalhe.ativo else '0' }}">
+      <div class="acoes">
+        <button type="submit">Salvar alterações</button>
+        {% if detalhe.ativo and detalhe.id_pessoa != pessoa_atual_id %}
+          <button type="submit" class="secundario" formaction="{{ url_for('web.inativar_pessoa', id_pessoa=detalhe.id_pessoa) }}">Inativar cadastro</button>
+        {% endif %}
+      </div>
+    </form>
+    {% if detalhe.interacoes %}<p class="discreto">Este cadastro possui: {{ detalhe.interacoes|join(', ') }}. A exclusão está bloqueada.</p>{% endif %}
+  </div>
+{% endif %}
+
+<div class="cartao">
+  <div class="pleito-cabeca"><h2>Cadastrados</h2><span class="discreto">{{ total }} registro(s)</span></div>
+  {% if pessoas %}
+    <form method="post" action="{{ url_for('web.inativar_pessoas_lote') }}">
+      <div class="rolagem">
+        <table>
+          <thead><tr><th><span class="leitor">Selecionar</span></th><th>Nome</th><th>Squad</th><th>Unidade</th><th>Perfil</th><th>Situação</th><th>Ação</th></tr></thead>
+          <tbody>
+          {% for pessoa in pessoas %}
+            <tr>
+              <td><input type="checkbox" name="id_pessoa" value="{{ pessoa.id_pessoa }}" {{ 'disabled' if not pessoa.ativo or pessoa.id_pessoa == pessoa_atual_id }}></td>
+              <td><strong>{{ pessoa.nome }}</strong><br><span class="discreto mono">{{ pessoa.matricula }}</span></td>
+              <td>{{ pessoa.squad or '—' }}</td><td>{{ pessoa.unidade or '—' }}</td>
+              <td>{{ papeis.get(pessoa.perfil, pessoa.perfil) }}</td>
+              <td><span class="etiqueta {{ 'publicado' if pessoa.ativo else 'descontinuado' }}">{{ 'Ativo' if pessoa.ativo else 'Inativo' }}</span></td>
+              <td><a class="botao secundario" href="{{ url_for('web.gestao_acessos', pagina=pagina, busca=busca, detalhe=pessoa.id_pessoa) }}">Detalhes</a></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="acoes tabela-acoes"><button type="submit" class="secundario">Inativar selecionados</button><span class="discreto">A ação não remove dados e não pode inativar o administrador conectado.</span></div>
+    </form>
+    <div class="paginacao">
+      <p>Mostrando {{ (pagina - 1) * por_pagina + 1 }}–{{ [pagina * por_pagina, total]|min }} de <strong>{{ total }}</strong>.</p>
+      {% if paginas > 1 %}<nav class="paginas" aria-label="Paginação">
+        {% if pagina > 1 %}<a href="{{ url_for('web.gestao_acessos', pagina=pagina - 1, busca=busca) }}">Anterior</a>{% endif %}
+        <span class="discreto">Página {{ pagina }} de {{ paginas }}</span>
+        {% if pagina < paginas %}<a href="{{ url_for('web.gestao_acessos', pagina=pagina + 1, busca=busca) }}">Próxima</a>{% endif %}
+      </nav>{% endif %}
+    </div>
+  {% else %}<p class="vazio">Nenhum cadastro encontrado.</p>{% endif %}
+</div>
+{% endblock %}

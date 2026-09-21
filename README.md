@@ -105,7 +105,7 @@ destaque de menu por família de rota — abrir um ativo não apaga mais o "voc�
 criticidade, vigência, revisão corrente e `origem` (`manual` ou `automatica`, o que separa
 o cadastro humano do que veio de uma integração). As particularidades de cada tipo ficam em
 `atributos` (JSON) e são declaradas em `catalogo/tipos.py`, o que mantém a semântica das
-entidades da proposta (Domínio, Subdomínio, Bounded Context, Capacidade, Sistema,
+entidades da proposta (Domínio, Subdomínio, Contextos Delimitados, Capacidade, Sistema,
 Aplicação, Repositório, API, Endpoint, Base de dados, Objeto de dado, Evento) sem
 replicar a mecânica de governança em dezenas de tabelas.
 
@@ -140,7 +140,7 @@ provedor, e papéis, escopos e regras não mudam.
   `@exige(acao)` aplica nas rotas de escrita. **Esconder o botão não é autorização** — a
   rota recusa o formulário enviado direto.
 - Cada etapa de validação exige o papel correspondente (`negocial` → negócio, `tecnica` →
-  tech lead, `arquitetural` → arquiteto), ou que a pessoa seja o responsável formal do
+  time técnico, `arquitetural` → arquiteto), ou que a pessoa seja o responsável formal do
   ativo. E quem submeteu a revisão não decide sobre ela.
 
 ## Notificações

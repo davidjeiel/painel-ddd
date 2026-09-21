@@ -40,7 +40,7 @@ def elenco(app):
             "admin": apoio.criar_pessoa(con, "Admin", "admin.teste", "admin"),
             "curador": apoio.criar_pessoa(con, "Curadora", "cura.teste", "curador"),
             "negocio": apoio.criar_pessoa(con, "Negócio", "nego.teste", "negocio"),
-            "tech_lead": apoio.criar_pessoa(con, "Tech Lead", "tech.teste", "tech_lead"),
+            "tech_lead": apoio.criar_pessoa(con, "Time técnico", "tech.teste", "tech_lead"),
             "arquiteto": apoio.criar_pessoa(con, "Arquiteta", "arqui.teste", "arquiteto"),
             "consulta": apoio.criar_pessoa(con, "Visitante", "visi.teste", "consulta"),
         }

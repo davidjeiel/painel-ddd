@@ -20,7 +20,7 @@ PAPEIS = {
     "admin": "Administrador do catálogo",
     "curador": "Curador (cadastra e submete)",
     "arquiteto": "Arquiteto",
-    "tech_lead": "Tech lead",
+    "tech_lead": "Time técnico",
     "negocio": "Negócio",
     "consulta": "Somente consulta",
 }
@@ -108,6 +108,99 @@ def pessoas_ativas(con) -> list[dict]:
         "SELECT p.*, s.nome AS squad FROM pessoa p "
         "LEFT JOIN squad s ON s.id_squad = p.id_squad "
         "WHERE p.ativo = 1 ORDER BY p.nome")]
+
+
+def pessoas(con, termo: str = "") -> list[dict]:
+    """Lista cadastros, opcionalmente filtrados por qualquer dado visível."""
+    sql = (
+        "SELECT p.*, s.nome AS squad FROM pessoa p "
+        "LEFT JOIN squad s ON s.id_squad = p.id_squad "
+    )
+    parametros: list[str] = []
+    if termo.strip():
+        partes = [
+            "p.nome", "p.matricula", "p.login", "p.email", "p.unidade",
+            "p.perfil", "s.nome", "s.codigo", "CAST(p.id_pessoa AS TEXT)",
+        ]
+        sql += " WHERE " + " OR ".join(
+            "LOWER(COALESCE({}, '')) LIKE LOWER(?)".format(parte)
+            for parte in partes)
+        parametros = [f"%{termo.strip()}%"] * len(partes)
+    sql += " ORDER BY p.ativo DESC, p.nome"
+    return [dict(l) for l in con.execute(sql, parametros)]
+
+
+def interacoes_pessoa(con, id_pessoa: int) -> list[str]:
+    """Retorna os vínculos que tornam um cadastro parte do histórico do sistema."""
+    cadastro = pessoa(con, id_pessoa)
+    identificadores = tuple(v for v in (
+        cadastro.get("login") if cadastro else None,
+        cadastro.get("matricula") if cadastro else None,
+    ) if v)
+    consultas = (
+        ("papéis atribuídos", "SELECT 1 FROM atribuicao_papel WHERE id_pessoa = ?"),
+        ("pleitos de acesso", "SELECT 1 FROM solicitacao_acesso WHERE id_pessoa = ?"),
+        ("responsabilidades em ativos", "SELECT 1 FROM responsabilidade WHERE id_pessoa = ?"),
+        ("notificações", "SELECT 1 FROM notificacao WHERE id_pessoa = ?"),
+        ("preferências de notificação",
+         "SELECT 1 FROM preferencia_notificacao WHERE id_pessoa = ?"),
+    )
+    interacoes = [nome for nome, sql in consultas
+            if con.execute(sql, (id_pessoa,)).fetchone()]
+    autoria = (
+        ("ativos cadastrados", "SELECT 1 FROM item_catalogo WHERE criado_por IN ({})"),
+        ("revisões criadas", "SELECT 1 FROM revisao_catalogo WHERE criado_por IN ({})"),
+        ("eventos de auditoria", "SELECT 1 FROM auditoria_evento WHERE usuario IN ({})"),
+    )
+    if identificadores:
+        marcadores = ",".join("?" for _ in identificadores)
+        for nome, sql in autoria:
+            if con.execute(sql.format(marcadores), identificadores).fetchone():
+                interacoes.append(nome)
+    return interacoes
+
+
+def atualizar_pessoa(con, id_pessoa: int, nome: str, email: str,
+                     unidade: str, id_squad: int | None, papel: str,
+                     ativo: bool, concedido_por: str) -> None:
+    if papel not in PAPEIS:
+        raise servicos.RegraDeNegocio("papel desconhecido")
+    pessoa_atual = pessoa(con, id_pessoa)
+    if pessoa_atual is None:
+        raise servicos.RegraDeNegocio("cadastro não encontrado")
+    if not nome.strip():
+        raise servicos.RegraDeNegocio("nome é obrigatório")
+    con.execute(
+        "UPDATE pessoa SET nome = ?, email = ?, unidade = ?, id_squad = ?, "
+        "perfil = ?, ativo = ? WHERE id_pessoa = ?",
+        (nome.strip(), email.strip(), unidade.strip(), id_squad, papel,
+         int(ativo), id_pessoa))
+    con.execute(
+        "UPDATE atribuicao_papel SET fim_vigencia = date('now') "
+        "WHERE id_pessoa = ? AND fim_vigencia IS NULL", (id_pessoa,))
+    if ativo:
+        conceder(con, id_pessoa, papel, concedido_por=concedido_por, commit=False)
+    con.commit()
+
+
+def inativar_pessoa(con, id_pessoa: int) -> None:
+    if pessoa(con, id_pessoa) is None:
+        raise servicos.RegraDeNegocio("cadastro não encontrado")
+    con.execute("UPDATE pessoa SET ativo = 0 WHERE id_pessoa = ?", (id_pessoa,))
+    con.execute("UPDATE atribuicao_papel SET fim_vigencia = date('now') "
+                "WHERE id_pessoa = ? AND fim_vigencia IS NULL", (id_pessoa,))
+    con.commit()
+
+
+def excluir_pessoa(con, id_pessoa: int) -> None:
+    interacoes = interacoes_pessoa(con, id_pessoa)
+    if interacoes:
+        raise servicos.RegraDeNegocio(
+            "cadastro não pode ser excluído: " + ", ".join(interacoes) + ".")
+    cur = con.execute("DELETE FROM pessoa WHERE id_pessoa = ?", (id_pessoa,))
+    if not cur.rowcount:
+        raise servicos.RegraDeNegocio("cadastro não encontrado")
+    con.commit()
 
 
 # -------------------------------------------------------------------- papéis

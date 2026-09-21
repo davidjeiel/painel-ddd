@@ -15,7 +15,7 @@ PAPEIS_ORDEM = ("negocio", "tech_lead", "arquiteto", "curador", "admin", "consul
 
 PAPEL_CURTO = {
     "negocio": "Negócio",
-    "tech_lead": "Tech lead",
+    "tech_lead": "Time técnico",
     "arquiteto": "Arquiteto",
     "curador": "Curador",
     "admin": "Admin",
@@ -25,6 +25,9 @@ PAPEL_CURTO = {
 # Rótulos legíveis do que está gravado em minúscula e sem acento no banco.
 ETAPA_ROTULO = {"negocial": "Negocial", "tecnica": "Técnica",
                 "arquitetural": "Arquitetural"}
+# Classe CSS do badge de cada etapa na tabela de rito — três cores fixas,
+# a mesma leitura em qualquer tipo de ativo.
+ETAPA_CLASSE = {"negocial": "et-n", "tecnica": "et-t", "arquitetural": "et-a"}
 CRITICIDADE_ROTULO = {"*": "todas", "critica": "crítica", "alta": "alta",
                       "media": "média", "baixa": "baixa"}
 
@@ -118,14 +121,14 @@ PERFIS = [
             "crítico de verdade. A tecnologia entra depois; sem o seu nome nas coisas, "
             "ela não tem onde se apoiar."),
         "faz": [
-            "Cadastrar e editar Domínio, Subdomínio, Bounded Context e Capacidade",
+            "Cadastrar e editar Domínio, Subdomínio, Contextos Delimitados e Capacidade",
             "Ser owner negocial de um ativo",
             "Enviar para validação e abrir revisão",
             "Decidir a etapa <strong>negocial</strong> das validações",
         ],
         "recusa": [
             ("Registrar relações entre ativos",
-             "quem implementa o quê é informação técnica: peça ao tech lead"),
+             "quem implementa o quê é informação técnica: peça ao time técnico"),
             ("Importar descobertas e triar a bandeja", "é o caminho do time técnico"),
             ("Descontinuar um ativo publicado", "fica com curador, arquiteto ou admin"),
             ("Cadastrar ou editar ativo técnico",
@@ -155,7 +158,7 @@ PERFIS = [
     {
         "chave": "tech",
         "papel": "tech_lead",
-        "rotulo": "Tech lead",
+        "rotulo": "Time técnico",
         "lema": "Você responde pela realidade técnica",
         "resumo": (
             "O que existe de fato, onde roda, e o que conversa com o quê. É o seu "
@@ -378,6 +381,251 @@ PERFIS = [
             "mostra os dois casos."),
     },
 ]
+
+# Trilha de trabalho por perfil, em etapas: o que o rito parece do cadastro à
+# publicação para quem exerce aquele papel. Chave = PERFIS[n]["chave"].
+FLUXOS: dict[str, list[dict]] = {
+    "negocio": [
+        {"etapa": "Cadastro", "papel": "Nomear o negócio",
+         "acao": "Cadastra domínios, subdomínios, contextos delimitados e capacidades.",
+         "detalhes": [
+             "Cadastrar e editar os ativos da hierarquia de estrutura DDD: domínio, "
+             "subdomínio, contextos delimitados e capacidade de negócio.",
+             "Na internalização do software legado adquirido, esta é a etapa "
+             "“as chaves”: antes de abrir o código, nomear o negócio que "
+             "o sistema sustenta.",
+             "A escrita é restrita ao bloco de tipos do papel — fora dele, o "
+             "catálogo é consulta, e a recusa acontece no servidor, não apenas "
+             "escondendo o botão."],
+         "atencao": "Registrar relações entre ativos não é ação deste papel."},
+        {"etapa": "Submissão", "papel": "Enviar para validação",
+         "acao": "Fecha o checklist vivo e submete o ativo ao rito.",
+         "detalhes": [
+             "Enviar o ativo para validação quando o cadastro atingir a nota "
+             "mínima de qualidade exigida pelo tipo.",
+             "O checklist vivo acompanha o ativo até a publicação, mostrando o "
+             "que ainda falta.",
+             "Marcar o ativo como crítico aperta o rito de verdade: mais uma "
+             "etapa, mais uma evidência, nota mais alta e metade do prazo."],
+         "atencao": "Quem submete não aprova: a partir daqui, a decisão é de "
+                    "outra pessoa."},
+        {"etapa": "Decisão", "papel": "Decidir a etapa negocial",
+         "acao": "Emite parecer na etapa que exige o papel de negócio.",
+         "detalhes": [
+             "Decidir a etapa negocial dos tipos cujo caminho a exige: domínio, "
+             "subdomínio, contextos delimitados, capacidade de negócio, "
+             "capacidade crítica e API crítica.",
+             "Quem decide uma etapa precisa do papel daquela etapa, ou ser o "
+             "responsável formal pelo ativo.",
+             "O parecer é obrigatório e o prazo por etapa é acompanhado por "
+             "aviso automático.",
+             "Segregação de função sem exceção: não se decide sobre uma revisão "
+             "que a própria pessoa enviou."]},
+        {"etapa": "Ciclo de vida", "papel": "Revalidar o que envelhece",
+         "acao": "Reconfirma o significado dentro da periodicidade do tipo.",
+         "detalhes": [
+             "Atender à revalidação periódica definida por tipo — de 90 a 365 "
+             "dias, conforme a política vigente.",
+             "Mudar um ativo publicado exige abrir uma revisão: a versão "
+             "vigente continua valendo para quem consome até a nova ser "
+             "aprovada.",
+             "Cada publicação vira uma revisão numerada com hash, e a trilha "
+             "registra quem fez o quê."]},
+    ],
+    "tech": [
+        {"etapa": "Descoberta", "papel": "Importar e triar o observável",
+         "acao": "Lê contratos OpenAPI e inventário Git e tria o que vira cadastro.",
+         "detalhes": [
+             "Rodar a descoberta automática sobre contratos OpenAPI e "
+             "inventário Git, com prévia antes de gravar.",
+             "Tudo o que a máquina traz nasce como rascunho marcado como "
+             "automático — nada vira afirmação oficial sozinho.",
+             "Triar a bandeja depois da importação: só uma pessoa transforma o "
+             "achado em cadastro."]},
+        {"etapa": "Cadastro", "papel": "Registrar a realidade construída",
+         "acao": "Cadastra sistema, aplicação, API, endpoint, base, objeto, "
+                 "repositório e evento.",
+         "detalhes": [
+             "Cadastrar e editar os ativos técnicos: sistema, aplicação, API, "
+             "endpoint, base de dados, objeto de dado, repositório e evento de "
+             "integração.",
+             "A escrita é restrita ao bloco de tipos do papel; fora dele, o "
+             "catálogo é consulta."]},
+        {"etapa": "Relação", "papel": "Ligar o ativo à capacidade",
+         "acao": "Registra as relações tipadas: implementa, expõe, consome.",
+         "detalhes": [
+             "Registrar as relações tipadas entre ativos técnicos e "
+             "capacidades de negócio — é aqui que a internalização de fato "
+             "acontece.",
+             "Usar relações em lote quando o volume exigir.",
+             "O que não se consegue ligar a capacidade nenhuma é código cuja "
+             "razão de existir ninguém sabe explicar — e essa é a lista mais "
+             "valiosa do processo."]},
+        {"etapa": "Submissão", "papel": "Enviar para validação",
+         "acao": "Submete o ativo técnico ao rito do seu tipo.",
+         "detalhes": [
+             "Enviar para validação observando a nota mínima do tipo — de 55% "
+             "em endpoint e objeto de dado a 80% em API crítica.",
+             "Anexar as evidências exigidas pela política do tipo e da "
+             "criticidade."]},
+        {"etapa": "Decisão", "papel": "Decidir a etapa técnica",
+         "acao": "Emite parecer na etapa que exige o papel do time técnico.",
+         "detalhes": [
+             "Decidir a etapa técnica — presente no caminho de praticamente "
+             "todos os tipos, do sistema ao evento de integração.",
+             "Respeitar o prazo por etapa: 72 h nos tipos de menor risco, 48 h "
+             "nos intermediários e 24 h nos críticos.",
+             "Não decidir sobre a própria submissão."]},
+        {"etapa": "Ciclo de vida", "papel": "Manter o ativo vivo",
+         "acao": "Revalida e abre revisão quando algo muda.",
+         "detalhes": [
+             "Cumprir a revalidação periódica do tipo: 90 dias em API crítica, "
+             "120 em API e evento, 180 em aplicação, repositório, endpoint e "
+             "objeto, 365 em sistema e base de dados.",
+             "Versão publicada não se edita: mudar exige abrir revisão, e nada "
+             "é sobrescrito."]},
+    ],
+    "arquiteto": [
+        {"etapa": "Cadastro", "papel": "Atravessar as duas hierarquias",
+         "acao": "Cadastra e edita tanto estrutura DDD quanto ativos técnicos.",
+         "detalhes": [
+             "Cadastrar e editar ativos nos dois blocos — é o papel que "
+             "atravessa a fronteira entre significado de negócio e realidade "
+             "técnica.",
+             "Registrar relações tipadas entre os ativos das duas hierarquias."]},
+        {"etapa": "Análise", "papel": "Ler o impacto antes de decidir",
+         "acao": "Usa o grafo navegável e a análise de impacto.",
+         "detalhes": [
+             "Consultar o grafo navegável de dependências para responder o que "
+             "quebra se um ativo mudar.",
+             "Usar a análise de impacto como insumo do parecer arquitetural.",
+             "Acompanhar a cobertura técnica e a cobertura de negócio: "
+             "capacidade sem implementação aparece destacada em vermelho no "
+             "mapa de negócio."]},
+        {"etapa": "Decisão", "papel": "Decidir a etapa arquitetural",
+         "acao": "É a última etapa do caminho nos tipos de maior risco.",
+         "detalhes": [
+             "Decidir a etapa arquitetural nos tipos que a exigem: domínio, "
+             "contextos delimitados, capacidade crítica, API, API crítica e "
+             "evento de integração.",
+             "A etapa arquitetural fecha o caminho de publicação — é o último "
+             "parecer antes do ativo virar versão vigente.",
+             "Segregação de função sem exceção de papel."]},
+        {"etapa": "Fim de vida", "papel": "Descontinuar ativo",
+         "acao": "Encerra o ciclo de vida do que não deve mais ser consumido.",
+         "detalhes": [
+             "Descontinuar ativos — ação reservada a arquiteto, curador e "
+             "administrador.",
+             "É o que permite responder “esta API é oficial?” com "
+             "algo além de usar e torcer.",
+             "A vigência substitui a exclusão: é o que permite responder quem "
+             "respondia por um ativo numa data passada."],
+         "atencao": "Importar e triar descobertas não é ação deste papel."},
+    ],
+    "curador": [
+        {"etapa": "Acesso", "papel": "Conceder papéis",
+         "acao": "Responde ao pleito de papel no rito de acesso.",
+         "detalhes": [
+             "Conceder papéis com alcance global, por domínio ou por squad.",
+             "Responder ao solicitante que se cadastrou pleiteando um papel.",
+             "A concessão define em que bloco de tipos a pessoa poderá "
+             "escrever."]},
+        {"etapa": "Preparo", "papel": "Preparar o acervo",
+         "acao": "Cadastra, relaciona e tria as descobertas automáticas.",
+         "detalhes": [
+             "Cadastrar e editar ativos e registrar relações nos dois blocos.",
+             "Importar e triar descobertas de contratos OpenAPI e inventário "
+             "Git.",
+             "Enviar ativos para validação depois de completar o cadastro."]},
+        {"etapa": "Qualidade", "papel": "Caçar o que envelheceu",
+         "acao": "Usa o painel executivo para achar ativo sem dono, incompleto "
+                 "ou vencido.",
+         "detalhes": [
+             "Acompanhar no painel executivo o que está sem dono, incompleto "
+             "ou com revalidação vencida.",
+             "É o papel que existe para impedir que o catálogo envelheça e "
+             "vire ficção em dois trimestres.",
+             "Na internalização do sistema adquirido, recomenda-se um owner "
+             "formal com o papel de curador no domínio do produto adquirido."]},
+        {"etapa": "Fim de vida", "papel": "Descontinuar ativo",
+         "acao": "Retira de circulação o que não deve mais ser consumido.",
+         "detalhes": ["Descontinuar ativos, junto com arquiteto e "
+                      "administrador."]},
+        {"etapa": "Limite", "papel": "Não decidir a validação",
+         "acao": "Prepara o cadastro, mas a decisão é de outra pessoa.",
+         "detalhes": [
+             "O curador prepara o cadastro mas não decide validação: se a "
+             "mesma pessoa preenchesse e aprovasse, o rito seria decorativo.",
+             "É exatamente esta restrição que separa um rito real de um "
+             "carimbo."],
+         "atencao": "Único papel de escrita ampla sem poder de decisão no "
+                    "rito."},
+    ],
+    "admin": [
+        {"etapa": "Acesso", "papel": "Sustentar o rito de acesso",
+         "acao": "Concede papéis e responde aos pleitos de cadastro.",
+         "detalhes": [
+             "Conceder papéis com alcance global, por domínio ou por squad, "
+             "junto com o curador.",
+             "Responder ao solicitante no rito de acesso, definindo o bloco de "
+             "tipos em que ele poderá escrever."]},
+        {"etapa": "Operação", "papel": "Operar o catálogo de ponta a ponta",
+         "acao": "Cadastra, relaciona, importa, tria e submete.",
+         "detalhes": [
+             "Cadastrar e editar ativos e registrar relações nos dois blocos.",
+             "Importar e triar descobertas automáticas.",
+             "Enviar ativos para validação."]},
+        {"etapa": "Decisão", "papel": "Decidir validação",
+         "acao": "Participa das decisões — sem exceção na segregação de "
+                 "função.",
+         "detalhes": [
+             "Decidir validação de ativos submetidos por outras pessoas.",
+             "Nem o administrador decide sobre uma revisão que ele mesmo "
+             "enviou: a segregação de função não tem exceção de papel."]},
+        {"etapa": "Fim de vida", "papel": "Descontinuar ativo",
+         "acao": "Encerra o ciclo de vida quando necessário.",
+         "detalhes": [
+             "Descontinuar ativos, junto com arquiteto e curador.",
+             "Nada é sobrescrito: cada publicação vira uma revisão numerada "
+             "com hash, e a trilha registra quem fez o quê."]},
+        {"etapa": "Implantação", "papel": "Garantir que o aviso chegue",
+         "acao": "O despacho de notificações depende de comandos agendados.",
+         "detalhes": [
+             "O aviso por evento e por prazo depende de dois comandos "
+             "agendados no servidor — item de implantação, não de "
+             "desenvolvimento.",
+             "A fila de envio é visível: notificação não despachada aparece "
+             "marcada como tal."]},
+    ],
+    "consulta": [
+        {"etapa": "Leitura", "papel": "Consultar o acervo",
+         "acao": "Lê todo o catálogo, sem escrever em nenhum bloco.",
+         "detalhes": [
+             "Consultar ativos das duas hierarquias, com busca global, "
+             "filtros que voltam na visita seguinte e visão 360° em abas.",
+             "Nenhuma ação de escrita está disponível: cadastrar, relacionar, "
+             "submeter, decidir, triar, descontinuar e conceder papéis estão "
+             "fora deste perfil."]},
+        {"etapa": "Navegação", "papel": "Responder as três perguntas",
+         "acao": "Descobre quem responde, o que quebra e se a API é oficial.",
+         "detalhes": [
+             "Quem responde por este ativo — pelo responsável formal "
+             "registrado.",
+             "O que quebra se isto mudar — pelo grafo navegável de "
+             "dependências e pela análise de impacto.",
+             "Esta API é oficial — pelo estado do ciclo de vida e pela versão "
+             "vigente publicada.",
+             "Que capacidades este domínio entrega — pelos mapas das duas "
+             "hierarquias."]},
+        {"etapa": "Evolução", "papel": "Pleitear um papel",
+         "acao": "Se precisar escrever, entra no rito de acesso.",
+         "detalhes": [
+             "Cadastrar-se com pleito de papel e aguardar a concessão por "
+             "curador ou administrador, com resposta ao solicitante.",
+             "A cartilha de uso por perfil está dentro da própria ferramenta, "
+             "com a matriz de permissões lida do próprio código."]},
+    ],
+}
 
 DUVIDAS = [
     ("O botão que eu usava sumiu",

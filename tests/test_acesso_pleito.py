@@ -376,7 +376,7 @@ def test_decisao_pela_tela_concede_e_aparece_no_perfil(app, elenco):
     apoio.entrar(cliente, pleito["id_pessoa"])
     html = cliente.get("/perfil").get_data(as_text=True)
     assert "aprovado" in html
-    assert "Tech lead" in html
+    assert "Time técnico" in html
 
 
 def test_menu_so_mostra_a_fila_para_quem_concede(app, elenco):

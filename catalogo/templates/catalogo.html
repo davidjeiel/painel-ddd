@@ -37,7 +37,7 @@
       <select id="id_squad" name="id_squad">
         <option value="">Todas</option>
         {% for s in squads %}
-          <option value="{{ s.id_squad }}" {{ 'selected' if filtros.id_squad == s.id_squad|string }}>{{ s.nome }}</option>
+          <option value="{{ s.id_squad }}" title="{{ s.descricao or '' }}" {{ 'selected' if filtros.id_squad == s.id_squad|string }}>{{ s.nome }} ({{ s.codigo }})</option>
         {% endfor %}
       </select>
     </div>

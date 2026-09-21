@@ -67,40 +67,6 @@ def registrar_comandos(app: Flask) -> None:
         servicos.gerar_snapshot(banco.get_db(), competencia)
         click.echo("Snapshot gerado.")
 
-    @app.cli.command("notificar")
-    @click.option("--limite", default=200, help="Máximo de notificações por execução.")
-    def notificar_cmd(limite):
-        """Despacha a outbox de notificações (idempotente)."""
-        from . import notificacoes
-        resumo = notificacoes.despachar(banco.get_db(), limite)
-        click.echo(f"Despachadas: {resumo['despachadas']} "
-                   f"(sem canal disponível: {resumo['sem_canal_disponivel']})")
-
-    @app.cli.command("vigiar-sla")
-    def vigiar_sla_cmd():
-        """Gera avisos de SLA vencendo e vencido para a fila pendente."""
-        from . import notificacoes
-        resumo = notificacoes.vigiar_sla(banco.get_db())
-        click.echo(f"Vencendo: {resumo['sla_vencendo']} · "
-                   f"vencidos: {resumo['sla_vencido']}")
-
-    @app.cli.command("conceder")
-    @click.argument("login")
-    @click.argument("papel")
-    @click.option("--dominio", default=None, type=int,
-                  help="id_item do domínio; sem isso o papel é global.")
-    def conceder_cmd(login, papel, dominio):
-        """Concede um papel a uma pessoa (pelo login)."""
-        from . import acesso
-        con = banco.get_db()
-        pessoa = acesso.pessoa_por_login(con, login)
-        if pessoa is None:
-            raise click.ClickException(f"pessoa com login '{login}' não encontrada")
-        acesso.conceder(con, pessoa["id_pessoa"], papel,
-                        "dominio" if dominio else "global", dominio, "cli")
-        escopo = f"no domínio {dominio}" if dominio else "global"
-        click.echo(f"{pessoa['nome']} agora é {papel} {escopo}.")
-
     @app.cli.command("qualidade")
     def qualidade_cmd():
         """Recalcula o score de qualidade de todos os ativos."""

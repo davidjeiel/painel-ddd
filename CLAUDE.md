@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Catálogo Corporativo DDD: aplicação Flask + SQLite (sem ORM, SQL cru via `sqlite3`)
 que implementa um catálogo de ativos governado — hierarquia de negócio (Domínio →
-Subdomínio → Bounded Context → Capacidade) e hierarquia técnica (Sistema → Aplicação
+Subdomínio → Contextos Delimitados → Capacidade) e hierarquia técnica (Sistema → Aplicação
 → API → Endpoint, Base de dados → Objeto de dado), com ciclo de vida, validação em
 etapas, RBAC com escopo, qualidade cadastral e notificações via outbox.
 
@@ -58,7 +58,7 @@ bancos já existentes (inclusive o dos testes) não recebem a coluna.
 **Modelo central — item genérico, não uma tabela por tipo**: `ITEM_CATALOGO` é o
 núcleo comum a todo ativo (identidade, tipo, hierarquia via `id_pai`, status de ciclo
 de vida, criticidade, vigência, revisão corrente, `origem` manual/automática). Os
-campos específicos de cada tipo (ex.: "linguagem ubíqua" de um Bounded Context) ficam
+campos específicos de cada tipo (ex.: "linguagem ubíqua" de um Contextos Delimitados) ficam
 em `atributos` (coluna JSON) e são **declarados em `catalogo/tipos.py`**
 (`TIPOS: dict[str, TipoAtivo]`), não em colunas de schema. Adicionar um tipo de ativo é
 uma entrada nesse dicionário, não uma migração. A validação de hierarquia (quem pode

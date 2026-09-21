@@ -54,6 +54,10 @@
     <div class="grupo">Administração</div>
     {% if pode('conceder') %}
       {{ item_menu('web.acessos', 'acessos', 'Pleitos de acesso', 'PA') }}
+      {{ item_menu('web.squads', 'squads', 'Squads', 'SQ') }}
+    {% endif %}
+    {% if pode('administrar') %}
+      {{ item_menu('web.gestao_acessos', 'acessos', 'Gestão de acessos', 'GA') }}
     {% endif %}
     {{ item_menu('web.politicas', 'politicas', 'Políticas', 'PO') }}
   </nav>

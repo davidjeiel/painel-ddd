@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS squad (
     codigo       TEXT NOT NULL UNIQUE,
     nome         TEXT NOT NULL,
     tribo        TEXT,
+    descricao    TEXT NOT NULL DEFAULT '',
     ativo        INTEGER NOT NULL DEFAULT 1
 );
 

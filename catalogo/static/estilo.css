@@ -283,10 +283,13 @@ a:hover { text-decoration: underline; }
   background: var(--superficie);
   border: 1px solid var(--linha);
   border-radius: var(--raio);
-  padding: 14px 16px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.kpi .rotulo { font-size: 12px; color: var(--tinta-suave); }
-.kpi .valor { font-size: 30px; font-weight: 700; line-height: 1.2; }
+.kpi .rotulo { font-size: 13px; color: var(--tinta-suave); line-height: 1.3; }
+.kpi .valor { font-size: 34px; font-weight: 700; line-height: 1.1; }
 .kpi .valor.risco { color: var(--risco); }
 .kpi .valor.alerta { color: var(--alerta); }
 .kpi .valor.bom { color: var(--sucesso); }
@@ -298,7 +301,7 @@ a.kpi:hover {
   box-shadow: var(--sombra-marca);
 }
 a.kpi:hover .rotulo { color: var(--marca); }
-.kpi .delta { font-size: 11.5px; margin-top: 2px; color: var(--tinta-suave); }
+.kpi .delta { font-size: 12px; margin-top: 0; color: var(--tinta-suave); }
 .kpi .delta.bom { color: var(--sucesso); }
 .kpi .delta.ruim { color: var(--alerta); }
 
@@ -700,32 +703,41 @@ fieldset.caixas-tipo legend { font-size: 12.5px; color: var(--tinta-suave); padd
   --perfil-consulta: #9aa4bb;   --perfil-consulta-bg: #1d2434;
 }
 
-.atalhos-perfil {
-  display: grid; gap: 12px; margin-bottom: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(152px, 1fr));
-}
-.cartao-perfil {
-  display: block; padding: 13px 15px; border-radius: var(--raio);
+/* seletor de perfil em pílula: sem JS, os links ainda navegam por âncora e
+   todos os cartões de perfil ficam visíveis, empilhados. */
+.seg {
+  position: sticky; top: 12px; z-index: 5;
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 2px; padding: 4px;
   background: var(--superficie); border: 1px solid var(--linha);
-  border-left: 4px solid var(--tom, var(--marca)); color: var(--tinta);
-  transition: border-color .12s, box-shadow .12s, transform .12s;
+  border-radius: 999px; margin-bottom: 16px; box-shadow: var(--sombra);
 }
-.cartao-perfil:hover {
-  text-decoration: none; box-shadow: var(--sombra); transform: translateY(-1px);
+.seg-pill {
+  position: absolute; top: 4px; bottom: 4px; left: 4px;
+  border-radius: 999px; background: var(--tom, var(--marca));
+  box-shadow: var(--sombra-marca);
+  transition: transform .28s cubic-bezier(.34,1.56,.5,1), width .28s ease, background .2s ease;
+  z-index: 0;
 }
-.cartao-perfil .papel {
-  display: block; font-weight: 700; font-size: 14px; color: var(--tom, var(--marca));
+.seg .tab {
+  position: relative; z-index: 1; appearance: none; border: 0; background: none;
+  cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--tinta-suave); padding: 8px 14px; border-radius: 999px;
+  transition: color .15s ease;
 }
-.cartao-perfil .lema {
-  display: block; font-size: 12.5px; color: var(--tinta-suave); margin-top: 2px;
-}
+.seg .tab:hover { color: var(--tinta); }
+.seg .tab.ativo { color: var(--sobre-marca); }
+.seg .tab:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
 
-.cartao-perfil.negocio, .cartao.perfil.negocio { --tom: var(--perfil-negocio); }
-.cartao-perfil.tech, .cartao.perfil.tech { --tom: var(--perfil-tech); }
-.cartao-perfil.arquiteto, .cartao.perfil.arquiteto { --tom: var(--perfil-arquiteto); }
-.cartao-perfil.curador, .cartao.perfil.curador { --tom: var(--perfil-curador); }
-.cartao-perfil.admin, .cartao.perfil.admin { --tom: var(--perfil-admin); }
-.cartao-perfil.consulta, .cartao.perfil.consulta { --tom: var(--perfil-consulta); }
+/* com JS, o container marca "abas-ativas" e só o cartão .ativo fica visível —
+   sem JS a regra nunca se aplica, e a página volta a empilhar tudo. */
+#perfis-lista.abas-ativas .cartao.perfil:not(.ativo) { display: none; }
+
+.cartao.perfil.negocio { --tom: var(--perfil-negocio); }
+.cartao.perfil.tech { --tom: var(--perfil-tech); }
+.cartao.perfil.arquiteto { --tom: var(--perfil-arquiteto); }
+.cartao.perfil.curador { --tom: var(--perfil-curador); }
+.cartao.perfil.admin { --tom: var(--perfil-admin); }
+.cartao.perfil.consulta { --tom: var(--perfil-consulta); }
 
 .cartao.perfil { border-left: 4px solid var(--tom, var(--marca)); scroll-margin-top: 16px; }
 .perfil-cabeca { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -738,17 +750,60 @@ fieldset.caixas-tipo legend { font-size: 12.5px; color: var(--tinta-suave); padd
 
 .grade.duas-iguais { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
-.pode, .naopode { list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
-.pode li, .naopode li { padding: 5px 0 5px 22px; position: relative; }
-.pode li::before {
-  content: "✓"; position: absolute; left: 0; color: var(--sucesso); font-weight: 700;
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.chip {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .01em; border-radius: 999px;
+  padding: 4px 11px; background: var(--tom-bg, var(--marca-suave));
+  color: var(--tom, var(--marca)); border: 1px solid var(--tom, var(--marca-borda));
 }
-.naopode li::before {
-  content: "✕"; position: absolute; left: 0; color: var(--risco); font-weight: 700;
+.chip.off {
+  background: var(--neutro-bg); color: var(--tinta-suave); border-color: var(--linha);
 }
-.naopode .porque {
-  display: block; color: var(--tinta-suave); font-size: 12.5px; margin-top: 1px;
+
+/* trilha por etapa: cada nó é um acordeão — a etapa e o papel sempre visíveis,
+   os detalhes e o limite do papel só ao abrir. */
+.jornada { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.no-cabeca {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: flex-start;
+  gap: 12px; width: 100%; padding: 10px 12px; border-radius: var(--raio);
+  border: 1px solid var(--linha); background: var(--superficie);
+  transition: border-color .12s, box-shadow .12s;
 }
+.no-cabeca:hover { border-color: var(--tom, var(--marca-borda)); }
+.no-cabeca:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.no-numero {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; margin-top: 1px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--tom-bg, var(--marca-suave)); color: var(--tom, var(--marca));
+}
+.no-corpo { flex: 1; min-width: 0; }
+.no-etapa {
+  display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+  font-weight: 700; color: var(--tom, var(--marca));
+}
+.no-papel { display: block; font-weight: 600; font-size: 14.5px; color: var(--tinta); margin-top: 1px; }
+.no-acao { display: block; font-size: 12.5px; color: var(--tinta-suave); margin-top: 2px; }
+.no-mais { flex: 0 0 auto; width: 18px; height: 18px; position: relative; margin-top: 4px; transition: transform .2s ease; }
+.no-mais::before, .no-mais::after {
+  content: ""; position: absolute; top: 50%; left: 50%; background: var(--tinta-suave);
+  transform: translate(-50%, -50%);
+}
+.no-mais::before { width: 11px; height: 1.5px; }
+.no-mais::after { width: 1.5px; height: 11px; transition: transform .2s ease; }
+.no.aberto .no-mais { transform: rotate(180deg); }
+.no.aberto .no-mais::after { transform: translate(-50%, -50%) scaleY(0); }
+.no-revela { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+.no.aberto .no-revela { grid-template-rows: 1fr; }
+.no-revela > div { overflow: hidden; }
+.no-detalhes { list-style: none; margin: 0; padding: 10px 12px 2px 50px; font-size: 13.5px; color: var(--tinta-suave); }
+.no-detalhes li { padding: 5px 0; position: relative; }
+.no-detalhes li::before { content: "•"; position: absolute; left: -13px; color: var(--tom, var(--marca)); }
+.no-revela .nota { margin: 4px 12px 12px 50px; }
+
+.et { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 9px; margin: 1px 3px 1px 0; white-space: nowrap; }
+.et-n { background: var(--marca-suave); color: var(--marca); }
+.et-t { background: var(--ok-bg); color: var(--sucesso); }
+.et-a { background: var(--perfil-arquiteto-bg); color: var(--perfil-arquiteto); }
 
 .rotina, .passos-guia { margin: 10px 0 0; padding-left: 0; list-style: none; counter-reset: guia; }
 .rotina > li, .passos-guia > li {
@@ -848,3 +903,12 @@ details.duvida > p { margin: 0 0 12px 20px; font-size: 13.5px; max-width: 78ch; 
 .pleito-linha:last-child { border-bottom: none; }
 .pleito-linha p { margin: 0 0 5px; }
 .pleito-linha .regra { margin: 6px 0; }
+
+
+.seg-perfis{
+  margin-top: 2% !important;
+}
+
+.grade{
+  margin-bottom: 2% !important;
+}

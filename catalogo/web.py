@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 
 from functools import wraps
 
@@ -46,6 +47,11 @@ SECOES = {
     "web.cartilha": "cartilha",
     "web.acessos": "acessos",
     "web.decidir_acesso": "acessos",
+    "web.squads": "squads",
+    "web.gestao_acessos": "acessos",
+    "web.editar_pessoa": "acessos",
+    "web.inativar_pessoa": "acessos",
+    "web.excluir_pessoa": "acessos",
     "web.solicitar_acesso": "perfil",
 }
 
@@ -64,6 +70,7 @@ FILTROS_CATALOGO = {
     "origem": "Origem do cadastro",
 }
 POR_PAGINA = 50
+POR_PAGINA_GESTAO = 20
 
 
 def pessoa_atual() -> dict | None:
@@ -315,6 +322,132 @@ def decidir_acesso(id_solicitacao: int):
         else:
             flash(f"Pleito de {pleito['nome']} negado, com a resposta registrada.", "ok")
     return redirect(url_for("web.acessos"))
+
+
+# --------------------------------------------------------- gestão de acessos
+@bp.route("/gestao-acessos", methods=["GET", "POST"])
+@exige("administrar")
+def gestao_acessos():
+    con = get_db()
+    termo = request.args.get("busca", "").strip()
+    pessoas = acesso.pessoas(con, termo)
+    for pessoa_cadastrada in pessoas:
+        pessoa_cadastrada["interacoes"] = acesso.interacoes_pessoa(
+            con, pessoa_cadastrada["id_pessoa"])
+    total = len(pessoas)
+    paginas = max(1, -(-total // POR_PAGINA_GESTAO))
+    pagina_atual = min(max(1, request.args.get("pagina", 1, type=int)), paginas)
+    inicio = (pagina_atual - 1) * POR_PAGINA_GESTAO
+    detalhe_id = request.args.get("detalhe", type=int)
+    detalhe = next((p for p in pessoas if p["id_pessoa"] == detalhe_id), None)
+    quem = pessoa_atual()
+    return render_template(
+        "gestao_acessos.html", pessoas=pessoas[inicio:inicio + POR_PAGINA_GESTAO],
+        detalhe=detalhe, pagina=pagina_atual, paginas=paginas, total=total,
+        por_pagina=POR_PAGINA_GESTAO,
+        busca=termo,
+        pessoa_atual_id=quem["id_pessoa"] if quem else None,
+        papeis=acesso.PAPEIS,
+        squads=[dict(l) for l in con.execute(
+            "SELECT * FROM squad WHERE ativo = 1 ORDER BY nome")])
+
+
+@bp.route("/gestao-acessos/inativar-lote", methods=["POST"])
+@exige("administrar")
+def inativar_pessoas_lote():
+    con = get_db()
+    ids = {int(valor) for valor in request.form.getlist("id_pessoa")
+           if valor.isdigit()}
+    quem = pessoa_atual()
+    if quem:
+        ids.discard(quem["id_pessoa"])
+    for id_pessoa in ids:
+        try:
+            acesso.inativar_pessoa(con, id_pessoa)
+        except servicos.RegraDeNegocio:
+            continue
+    flash(f"{len(ids)} cadastro(s) inativado(s).", "ok")
+    return redirect(url_for("web.gestao_acessos"))
+
+
+@bp.route("/gestao-acessos/<int:id_pessoa>/editar", methods=["POST"])
+@exige("administrar")
+def editar_pessoa(id_pessoa: int):
+    con = get_db()
+    try:
+        acesso.atualizar_pessoa(
+            con, id_pessoa, request.form.get("nome", ""),
+            request.form.get("email", ""), request.form.get("unidade", ""),
+            request.form.get("id_squad", type=int),
+            request.form.get("papel", "consulta"),
+            request.form.get("ativo") == "1", usuario_atual())
+    except servicos.RegraDeNegocio as erro:
+        flash(str(erro), "erro")
+    else:
+        flash("Cadastro atualizado.", "ok")
+    return redirect(url_for("web.gestao_acessos"))
+
+
+@bp.route("/gestao-acessos/<int:id_pessoa>/inativar", methods=["POST"])
+@exige("administrar")
+def inativar_pessoa(id_pessoa: int):
+    quem = pessoa_atual()
+    if quem and quem["id_pessoa"] == id_pessoa:
+        flash("O administrador conectado não pode inativar o próprio cadastro.", "erro")
+        return redirect(url_for("web.gestao_acessos"))
+    try:
+        acesso.inativar_pessoa(get_db(), id_pessoa)
+    except servicos.RegraDeNegocio as erro:
+        flash(str(erro), "erro")
+    else:
+        flash("Cadastro inativado e acessos encerrados.", "ok")
+    return redirect(url_for("web.gestao_acessos"))
+
+
+@bp.route("/gestao-acessos/<int:id_pessoa>/excluir", methods=["POST"])
+@exige("administrar")
+def excluir_pessoa(id_pessoa: int):
+    if pessoa_atual() and pessoa_atual()["id_pessoa"] == id_pessoa:
+        flash("O administrador conectado não pode excluir o próprio cadastro.", "erro")
+        return redirect(url_for("web.gestao_acessos"))
+    try:
+        acesso.excluir_pessoa(get_db(), id_pessoa)
+    except servicos.RegraDeNegocio as erro:
+        flash(str(erro), "erro")
+    else:
+        flash("Cadastro excluído.", "ok")
+    return redirect(url_for("web.gestao_acessos"))
+
+
+# --------------------------------------------------------------------- squads
+@bp.route("/squads", methods=["GET", "POST"])
+@exige("conceder")
+def squads():
+    con = get_db()
+    if request.method == "POST":
+        titulo = request.form.get("titulo", "").strip()
+        sigla = request.form.get("sigla", "").strip().upper()
+        descricao = request.form.get("descricao", "").strip()
+        if not titulo or not sigla or not descricao:
+            flash("Título, sigla e descrição são obrigatórios.", "erro")
+        elif len(sigla) > 20:
+            flash("A sigla deve ter no máximo 20 caracteres.", "erro")
+        else:
+            try:
+                con.execute(
+                    "INSERT INTO squad (nome, codigo, descricao) VALUES (?, ?, ?)",
+                    (titulo, sigla, descricao))
+                con.commit()
+            except sqlite3.IntegrityError:
+                flash("Já existe uma squad com essa sigla.", "erro")
+            else:
+                flash("Squad cadastrada.", "ok")
+                return redirect(url_for("web.squads"))
+
+    squads_cadastradas = [dict(l) for l in con.execute(
+        "SELECT * FROM squad WHERE ativo = 1 ORDER BY nome")]
+    return render_template("squads.html", squads=squads_cadastradas,
+                           form=request.form)
 
 
 # ------------------------------------------------------------- notificações
@@ -922,24 +1055,30 @@ def politicas():
 
 @bp.route("/cartilha")
 def cartilha():
-    """Guia de uso por perfil. A prosa vem do módulo; as tabelas, do sistema.
+    """Guia de uso por perfil, dentro do layout do app.
 
-    Matriz de permissões e ritos são derivados de `acesso.PERMISSOES` e da tabela
-    de políticas — assim a cartilha não descreve uma ferramenta que já mudou.
+    Matriz de permissões, trilha de etapas e ritos são derivados de
+    `acesso.PERMISSOES`, `cartilha.FLUXOS` e da tabela de políticas — assim a
+    cartilha não descreve uma ferramenta que já mudou.
     """
     con = get_db()
     ritos = [dict(l) for l in con.execute(
         "SELECT * FROM politica_governanca ORDER BY tipo_item, criticidade")]
     for r in ritos:
-        r["etapas"] = [guia.ETAPA_ROTULO.get(e, e) for e in json.loads(r["etapas"])]
+        codigos = json.loads(r["etapas"])
+        r["etapas"] = [{"codigo": e, "rotulo": guia.ETAPA_ROTULO.get(e, e),
+                        "classe": guia.ETAPA_CLASSE.get(e, "")} for e in codigos]
         r["criticidade"] = guia.CRITICIDADE_ROTULO.get(r["criticidade"], r["criticidade"])
     return render_template(
         "cartilha.html",
         perfis=guia.PERFIS,
+        fluxos=guia.FLUXOS,
         primeiros_passos=guia.PRIMEIROS_PASSOS,
         regras=guia.REGRAS,
         duvidas=guia.DUVIDAS,
         matriz=guia.matriz(),
         papeis_ordem=guia.PAPEIS_ORDEM,
         papel_curto=guia.PAPEL_CURTO,
+        etapa_rotulo=guia.ETAPA_ROTULO,
+        total_tipos=len(tipos.TIPOS),
         ritos=ritos)

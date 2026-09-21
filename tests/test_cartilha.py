@@ -42,7 +42,7 @@ def test_cartilha_abre_sem_identificacao(cliente):
     """Quem ainda não se identificou é justamente quem mais precisa do guia."""
     resposta = cliente.get("/cartilha")
     assert resposta.status_code == 200
-    assert "Cartilha do catálogo" in resposta.get_data(as_text=True)
+    assert "O fluxo de cada perfil" in resposta.get_data(as_text=True)
 
 
 def test_cartilha_nao_escreve_nada(cliente):

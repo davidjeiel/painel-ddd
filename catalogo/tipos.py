@@ -46,7 +46,7 @@ TIPOS: dict[str, TipoAtivo] = {
         exige_owner_negocial=True,
     ),
     "contexto": TipoAtivo(
-        "contexto", "Bounded Context", "Estrutura DDD", "subdominio", "CTX",
+        "contexto", "Contextos Delimitados", "Estrutura DDD", "subdominio", "CTX",
         (Campo("linguagem_ubiqua", "Termos da linguagem ubíqua", "area"),
          Campo("estrategia_integracao", "Estratégia de integração", "selecao", False,
                ("parceria", "cliente-fornecedor", "conformista",

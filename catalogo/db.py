@@ -38,6 +38,7 @@ MIGRACOES = [
     ("pessoa", "identidade_externa", "TEXT"),
     ("pessoa", "origem_identidade", "TEXT NOT NULL DEFAULT 'local'"),
     ("pessoa", "unidade", "TEXT"),
+    ("squad", "descricao", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

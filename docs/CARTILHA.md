@@ -17,7 +17,7 @@ seu dia.
 | Papel | Você responde por |
 | --- | --- |
 | [Negócio](#negócio) | o significado |
-| [Tech lead](#tech-lead) | a realidade técnica |
+| [Time técnico](#time-técnico) | a realidade técnica |
 | [Arquiteto](#arquiteto) | a coerência do todo |
 | [Curador](#curador) | manter o cadastro vivo |
 | [Administrador](#administrador) | operar a ferramenta e conceder acesso |
@@ -93,7 +93,7 @@ coisas, ela não tem onde se apoiar.
 
 **O que você faz**
 
-- Cadastrar e editar Domínio, Subdomínio, Bounded Context e Capacidade
+- Cadastrar e editar Domínio, Subdomínio, Contextos Delimitados e Capacidade
 - Ser owner negocial de um ativo
 - Enviar para validação e abrir revisão
 - Decidir a etapa **negocial** das validações
@@ -101,7 +101,7 @@ coisas, ela não tem onde se apoiar.
 **O que a ferramenta recusa**
 
 - Registrar relações entre ativos — quem implementa o quê é informação técnica: peça ao
-  tech lead
+   time técnico
 - Importar descobertas e triar a bandeja — é o caminho do time técnico
 - Descontinuar um ativo publicado — fica com curador, arquiteto ou admin
 - Cadastrar ou editar ativo técnico — sistema, aplicação, API, endpoint e base de dados
@@ -124,7 +124,7 @@ coisas, ela não tem onde se apoiar.
 
 ---
 
-## Tech lead
+## Time técnico
 
 `tech_lead`
 
@@ -342,7 +342,7 @@ resposta está aqui — ou no modo de leitura.
 
 ### Quem pode fazer o quê
 
-| Ação | Negócio | Tech lead | Arquiteto | Curador | Admin | Consulta |
+| Ação | Negócio | Time técnico | Arquiteto | Curador | Admin | Consulta |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Cadastrar ativos | sim | sim | sim | sim | sim | — |
 | Editar rascunho | sim | sim | sim | sim | sim | — |
@@ -357,7 +357,7 @@ resposta está aqui — ou no modo de leitura.
 | Administrar a ferramenta | — | — | — | — | sim | — |
 
 "Decidir validação" é permissão para **entrar na fila** — qual etapa você decide depende do
-papel: *negocial* exige negócio, *técnica* exige tech lead, *arquitetural* exige arquiteto.
+papel: *negocial* exige negócio, *técnica* exige time técnico, *arquitetural* exige arquiteto.
 Admin decide qualquer uma. E em qualquer caso, o **responsável formal** do ativo pode
 decidir a etapa correspondente ao papel que exerce sobre ele.
 
@@ -370,7 +370,7 @@ Quem define é a política do tipo e da criticidade.
 | --- | --- | :---: | :---: | :---: | :---: |
 | Domínio | negocial → arquitetural | 1 | 70% | 72h | 365 dias |
 | Subdomínio | negocial | — | 65% | 72h | 365 dias |
-| Bounded Context | negocial → técnica → arquitetural | 1 | 75% | 48h | 180 dias |
+| Contextos Delimitados | negocial → técnica → arquitetural | 1 | 75% | 48h | 180 dias |
 | Capacidade | negocial → técnica | 1 | 70% | 48h | 180 dias |
 | Capacidade **crítica** | negocial → técnica → arquitetural | 2 | 80% | 24h | 90 dias |
 | Sistema | técnica | — | 60% | 72h | 365 dias |

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Squads{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho">
+  <h1>Squads</h1>
+  <p>Cadastre os times responsáveis pelos ativos do catálogo.</p>
+</div>
+
+<div class="grade duas">
+  <div class="cartao">
+    <h2>Nova squad</h2>
+    <form method="post">
+      <div class="campo">
+        <label for="titulo">Título</label>
+        <input id="titulo" name="titulo" type="text" value="{{ form.get('titulo', '') }}" maxlength="120" required>
+      </div>
+      <div class="campo">
+        <label for="sigla">Sigla</label>
+        <input id="sigla" name="sigla" type="text" value="{{ form.get('sigla', '') }}" maxlength="20" required>
+      </div>
+      <div class="campo">
+        <label for="descricao">Descrição</label>
+        <textarea id="descricao" name="descricao" maxlength="500" required>{{ form.get('descricao', '') }}</textarea>
+      </div>
+      <button type="submit">Cadastrar squad</button>
+    </form>
+  </div>
+
+  <div class="cartao">
+    <h2>Squads cadastradas</h2>
+    {% if squads %}
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Título</th><th>Sigla</th><th>Descrição</th></tr></thead>
+          <tbody>
+          {% for squad in squads %}
+            <tr>
+              <td><strong>{{ squad.nome }}</strong></td>
+              <td><span class="mono">{{ squad.codigo }}</span></td>
+              <td>{{ squad.descricao }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="vazio">Nenhuma squad cadastrada.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
