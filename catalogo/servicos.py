@@ -950,6 +950,7 @@ def grafo_catalogo(con, id_dominio: int | None = None,
     escopos = [descendentes(raiz) for raiz in
                (id_item or id_dominio, id_subdominio) if raiz]
     escopo = set.intersection(*escopos) if escopos else None
+    filtrado = any((id_item, id_dominio, id_subdominio))
     if escopo is None:
         escopo = {linha["id_item"] for linha in con.execute(
             "SELECT id_item FROM item_catalogo WHERE status_ciclo_vida != 'arquivado'")}
@@ -960,7 +961,7 @@ def grafo_catalogo(con, id_dominio: int | None = None,
         f"AND id_item IN ({marcas}) ORDER BY tipo_item, nome", list(escopo))]
     if not nos:
         return {"nos": [], "arestas": [], "largura": largura,
-                "altura": altura, "expandido": True}
+            "altura": altura, "expandido": True, "filtrado": filtrado}
 
     cx, cy = largura / 2, altura / 2
     rx, ry = largura / 2 - 80, altura / 2 - 75
@@ -975,18 +976,19 @@ def grafo_catalogo(con, id_dominio: int | None = None,
                 "tipo_relacao": "hierarquia", "criticidade": "",
                 "mecanismo": "pai/filho"}
                for no in nos if no["id_pai"] in posicoes]
-    arestas.extend(dict(l) for l in con.execute(
-        "SELECT r.id_origem, r.id_destino, r.tipo_relacao, r.criticidade, "
-        "r.mecanismo FROM relacionamento_ativo r "
-        f"WHERE r.fim_vigencia IS NULL AND r.id_origem IN ({marcas}) "
-        f"AND r.id_destino IN ({marcas}) ORDER BY r.tipo_relacao", [*escopo, *escopo]))
+    if not filtrado:
+        arestas.extend(dict(l) for l in con.execute(
+            "SELECT r.id_origem, r.id_destino, r.tipo_relacao, r.criticidade, "
+            "r.mecanismo FROM relacionamento_ativo r "
+            f"WHERE r.fim_vigencia IS NULL AND r.id_origem IN ({marcas}) "
+            f"AND r.id_destino IN ({marcas}) ORDER BY r.tipo_relacao", [*escopo, *escopo]))
     for aresta in arestas:
         x1, y1 = posicoes[aresta["id_origem"]]
         x2, y2 = posicoes[aresta["id_destino"]]
         aresta.update(x1=round(x1, 1), y1=round(y1, 1),
                       x2=round(x2, 1), y2=round(y2, 1))
     return {"nos": nos, "arestas": arestas, "largura": largura,
-            "altura": altura, "expandido": True}
+            "altura": altura, "expandido": True, "filtrado": filtrado}
 
 
 def analise_impacto(con, id_item: int) -> dict:
