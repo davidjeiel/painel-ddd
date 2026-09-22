@@ -45,11 +45,16 @@ POLITICAS_PADRAO = [
 
 def semear_politicas(con) -> None:
     for tipo_item, crit, etapas, ev, score, sla, revisao in POLITICAS_PADRAO:
+        # o dialeto anterior ignorava duplicidade na cláusula; aqui o
+        # WHERE NOT EXISTS faz o mesmo papel, e explicitamente
         con.execute(
-            "INSERT OR IGNORE INTO politica_governanca "
+            "INSERT INTO politica_governanca "
             "(tipo_item, criticidade, etapas, evidencia_minima, score_minimo,"
-            " sla_horas, periodicidade_revisao_dias) VALUES (?,?,?,?,?,?,?)",
-            (tipo_item, crit, json.dumps(etapas), ev, score, sla, revisao),
+            " sla_horas, periodicidade_revisao_dias) "
+            "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+            "  SELECT 1 FROM politica_governanca WHERE tipo_item = ? AND criticidade = ?)",
+            (tipo_item, crit, json.dumps(etapas), ev, score, sla, revisao,
+             tipo_item, crit),
         )
     con.commit()
 
@@ -240,12 +245,11 @@ def abrir_validacoes(con, id_item: int, id_revisao: int, usuario: str) -> list[i
     prazo = (datetime.now() + timedelta(hours=pol["sla_horas"])).isoformat(" ", "seconds")
     ids = []
     for etapa in pol["etapas"]:
-        cur = con.execute(
+        ids.append(con.execute(
             "INSERT INTO validacao (id_item, id_revisao, etapa, prazo, responsavel) "
-            "VALUES (?,?,?,?,?)",
+            "OUTPUT INSERTED.id_validacao VALUES (?,?,?,?,?)",
             (id_item, id_revisao, etapa, prazo, None),
-        )
-        ids.append(cur.lastrowid)
+        ).fetchone()[0])
     return ids
 
 

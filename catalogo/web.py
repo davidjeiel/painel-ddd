@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 
 from functools import wraps
 
@@ -11,7 +10,7 @@ from flask import (Blueprint, abort, flash, jsonify, redirect, render_template,
 
 from . import (acesso, cartilha as guia, governanca, integracoes, notificacoes,
                servicos, tipos)
-from .db import get_db
+from .db import ErroIntegridade, get_db
 
 bp = Blueprint("web", __name__)
 
@@ -456,7 +455,7 @@ def squads():
                     "INSERT INTO squad (nome, codigo, descricao) VALUES (?, ?, ?)",
                     (titulo, sigla, descricao))
                 con.commit()
-            except sqlite3.IntegrityError:
+            except ErroIntegridade:
                 flash("Já existe uma squad com essa sigla.", "erro")
             else:
                 flash("Squad cadastrada.", "ok")
@@ -501,7 +500,7 @@ def editar_squad(id_squad: int):
                         "WHERE id_squad = ?",
                         (titulo, sigla, descricao, id_squad))
             con.commit()
-        except sqlite3.IntegrityError:
+        except ErroIntegridade:
             flash("Já existe uma squad com essa sigla.", "erro")
         else:
             flash("Squad atualizada.", "ok")
@@ -813,7 +812,7 @@ def detalhe(id_item: int):
                   for l in con.execute(
                       "SELECT id_item, codigo, nome, tipo_item FROM item_catalogo "
                       "WHERE id_item <> ? AND status_ciclo_vida NOT IN ('arquivado') "
-                      "ORDER BY tipo_item, nome LIMIT 300", (id_item,))]
+                      "ORDER BY tipo_item, nome OFFSET 0 ROWS FETCH NEXT 300 ROWS ONLY", (id_item,))]
     checagem = governanca.pre_check(con, id_item)
     aba = request.args.get("aba", "resumo")
     if aba not in dict(ABAS_ATIVO):
@@ -980,8 +979,8 @@ def relacoes_lote(id_item: int):
     marcas = ",".join("?" * len(sugeridos))
     sql = ("SELECT i.id_item, i.codigo, i.nome, i.tipo_item, i.status_ciclo_vida,"
            " p.nome AS pai_nome,"
-           " EXISTS (SELECT 1 FROM relacionamento_ativo r WHERE r.id_origem = ?"
-           "   AND r.id_destino = i.id_item AND r.tipo_relacao = ?) AS ja_existe"
+           " CASE WHEN EXISTS (SELECT 1 FROM relacionamento_ativo r WHERE r.id_origem = ?"
+           "   AND r.id_destino = i.id_item AND r.tipo_relacao = ?) THEN 1 ELSE 0 END AS ja_existe"
            " FROM item_catalogo i LEFT JOIN item_catalogo p ON p.id_item = i.id_pai"
            " WHERE i.id_item <> ? AND i.status_ciclo_vida NOT IN ('arquivado')")
     params: list = [id_item, tipo_relacao, id_item]
@@ -989,7 +988,7 @@ def relacoes_lote(id_item: int):
         sql += f" AND i.tipo_item IN ({marcas})"
         params += list(sugeridos)
     candidatos = [dict(l) for l in con.execute(
-        sql + " ORDER BY i.tipo_item, i.nome LIMIT 400", params)]
+        sql + " ORDER BY i.tipo_item, i.nome OFFSET 0 ROWS FETCH NEXT 400 ROWS ONLY", params)]
 
     return render_template("relacoes_lote.html", item=dict(item),
                            trilha=servicos.trilha(con, id_item),

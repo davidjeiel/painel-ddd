@@ -1,0 +1,58 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: catalogo-db
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+      MSSQL_TCP_PORT: "1433"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"YourStrong!Passw0rd\" -C -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"YourStrong!Passw0rd\" -Q \"SELECT 1\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - catalogo-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: catalogo-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_APP: catalogo
+      FLASK_ENV: development
+      SECRET_KEY: catalogo-ddd-dev
+      CATALOGO_DB_SERVIDOR: catalogo-db
+      CATALOGO_DB_PORT: "1433"
+      CATALOGO_DB_BASE: catalogo
+      CATALOGO_DB_USUARIO: sa
+      CATALOGO_DB_SENHA: YourStrong!Passw0rd
+      CATALOGO_DB_DRIVER: ODBC Driver 18 for SQL Server
+      CATALOGO_DB_CRIPTOGRAFIA: "no"
+      CATALOGO_DB_CONFIAR_CERT: "yes"
+      CATALOGO_DB_TIMEOUT: "30"
+      CATALOGO_DB_INTEGRADA: "false"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "5000:5000"
+    networks:
+      - catalogo-net
+
+networks:
+  catalogo-net:
+    driver: bridge
+
+volumes:
+  mssql-data:

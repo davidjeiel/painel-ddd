@@ -176,7 +176,7 @@ def atualizar_pessoa(con, id_pessoa: int, nome: str, email: str,
         (nome.strip(), email.strip(), unidade.strip(), id_squad, papel,
          int(ativo), id_pessoa))
     con.execute(
-        "UPDATE atribuicao_papel SET fim_vigencia = date('now') "
+        "UPDATE atribuicao_papel SET fim_vigencia = CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23) "
         "WHERE id_pessoa = ? AND fim_vigencia IS NULL", (id_pessoa,))
     if ativo:
         conceder(con, id_pessoa, papel, concedido_por=concedido_por, commit=False)
@@ -187,7 +187,7 @@ def inativar_pessoa(con, id_pessoa: int) -> None:
     if pessoa(con, id_pessoa) is None:
         raise servicos.RegraDeNegocio("cadastro não encontrado")
     con.execute("UPDATE pessoa SET ativo = 0 WHERE id_pessoa = ?", (id_pessoa,))
-    con.execute("UPDATE atribuicao_papel SET fim_vigencia = date('now') "
+    con.execute("UPDATE atribuicao_papel SET fim_vigencia = CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23) "
                 "WHERE id_pessoa = ? AND fim_vigencia IS NULL", (id_pessoa,))
     con.commit()
 
@@ -213,17 +213,17 @@ def conceder(con, id_pessoa: int, papel: str, escopo_tipo: str = "global",
         raise servicos.RegraDeNegocio(f"escopo desconhecido: {escopo_tipo}")
     if escopo_tipo != "global" and not escopo_id:
         raise servicos.RegraDeNegocio(f"escopo {escopo_tipo} exige um alvo")
-    cur = con.execute(
+    id_atribuicao = con.execute(
         "INSERT INTO atribuicao_papel (id_pessoa, papel, escopo_tipo, escopo_id,"
-        " concedido_por) VALUES (?,?,?,?,?)",
-        (id_pessoa, papel, escopo_tipo, escopo_id, concedido_por))
+        " concedido_por) OUTPUT INSERTED.id_atribuicao VALUES (?,?,?,?,?)",
+        (id_pessoa, papel, escopo_tipo, escopo_id, concedido_por)).fetchone()[0]
     if commit:
         con.commit()
-    return cur.lastrowid
+    return id_atribuicao
 
 
 def revogar(con, id_atribuicao: int) -> None:
-    con.execute("UPDATE atribuicao_papel SET fim_vigencia = date('now') "
+    con.execute("UPDATE atribuicao_papel SET fim_vigencia = CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23) "
                 "WHERE id_atribuicao = ? AND fim_vigencia IS NULL", (id_atribuicao,))
     con.commit()
 
@@ -231,7 +231,7 @@ def revogar(con, id_atribuicao: int) -> None:
 def papeis(con, id_pessoa: int) -> list[dict]:
     return [dict(l) for l in con.execute(
         "SELECT * FROM atribuicao_papel WHERE id_pessoa = ? "
-        "AND (fim_vigencia IS NULL OR fim_vigencia >= date('now')) "
+        "AND (fim_vigencia IS NULL OR fim_vigencia >= CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23)) "
         "ORDER BY papel", (id_pessoa,))]
 
 
@@ -451,17 +451,16 @@ def solicitar_acesso(con, matricula: str, nome: str, email: str, unidade: str,
                 "Já existe um pleito seu aguardando decisão. "
                 "Acompanhe em Seu perfil.")
     else:
-        cur = con.execute(
+        id_pessoa = con.execute(
             "INSERT INTO pessoa (matricula, nome, email, unidade, perfil, login) "
-            "VALUES (?,?,?,?,'consulta',?)",
+            "OUTPUT INSERTED.id_pessoa VALUES (?,?,?,?,'consulta',?)",
             (dados["matricula"], dados["nome"], dados["email"], dados["unidade"],
-             dados["matricula"].lower()))
-        id_pessoa = cur.lastrowid
+             dados["matricula"].lower())).fetchone()[0]
 
-    cur = con.execute(
+    id_solicitacao = con.execute(
         "INSERT INTO solicitacao_acesso (id_pessoa, papel_pleiteado, justificativa) "
-        "VALUES (?,?,?)", (id_pessoa, papel_pleiteado, (justificativa or "").strip()))
-    id_solicitacao = cur.lastrowid
+        "OUTPUT INSERTED.id_solicitacao VALUES (?,?,?)",
+        (id_pessoa, papel_pleiteado, (justificativa or "").strip())).fetchone()[0]
 
     notificacoes.para_muitos(
         con, quem_concede(con, papel_pleiteado), "acesso_solicitado",
@@ -544,7 +543,7 @@ def decidir_solicitacao(con, id_solicitacao: int, id_decisor: int, aprovar: bool
 
     con.execute(
         "UPDATE solicitacao_acesso SET status = ?, decidido_por = ?, "
-        "decidido_em = datetime('now'), papel_concedido = ?, escopo_tipo = ?, "
+        "decidido_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120), papel_concedido = ?, escopo_tipo = ?, "
         "escopo_id = ?, resposta = ? WHERE id_solicitacao = ?",
         ("aprovada" if aprovar else "negada", assinatura, papel,
          escopo_tipo if aprovar else None, escopo_id if aprovar else None,

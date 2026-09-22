@@ -17,12 +17,12 @@ from catalogo import create_app, db as banco, governanca, servicos, tipos  # noq
 
 
 @pytest.fixture()
-def app(tmp_path):
-    aplicacao = create_app({"DATABASE": str(tmp_path / "fluxo.db"), "TESTING": True,
+def app(base_de_testes):
+    aplicacao = create_app({"DATABASE": base_de_testes, "TESTING": True,
                             "SECRET_KEY": "teste"})
     with aplicacao.app_context():
-        banco.init_db()
         con = banco.get_db()
+        banco.limpar_tudo(con)
         governanca.semear_politicas(con)
         con.execute("INSERT INTO squad (codigo, nome) VALUES ('SQ-1', 'Squad Crédito')")
         con.execute("INSERT INTO pessoa (matricula, nome, perfil) "
@@ -285,19 +285,22 @@ def test_tela_da_mesa_responde_e_entra_no_menu(app, cliente):
     assert "Fila livre" in html
 
 
-def test_migracao_cria_a_coluna_em_banco_antigo(tmp_path):
-    """Banco criado antes da onda 2 recebe atribuido_a sem perder dados."""
-    caminho = tmp_path / "antigo.db"
-    con = banco.conectar(str(caminho))
-    con.executescript(
-        "CREATE TABLE validacao (id_validacao INTEGER PRIMARY KEY, id_item INTEGER,"
-        " etapa TEXT, situacao TEXT DEFAULT 'pendente');"
-        "INSERT INTO validacao (id_item, etapa) VALUES (1, 'tecnica');")
-    con.commit()
-    assert banco.migrar(con) == ["validacao.atribuido_a"]
-    assert con.execute("SELECT atribuido_a FROM validacao").fetchone()["atribuido_a"] is None
-    assert banco.migrar(con) == []          # idempotente
-    con.close()
+def test_migracao_cria_a_coluna_em_banco_antigo(app):
+    """Banco criado antes da onda 2 recebe atribuido_a sem perder dados.
+
+    No dialeto anterior dava para forjar a tabela antiga do zero. Aqui a base é
+    compartilhada pela sessão, então o estado anterior é simulado removendo a
+    coluna — o que se quer provar é o mecanismo do ALTER, não como ele chegou lá.
+    """
+    with app.app_context():
+        con = banco.get_db()
+        con.execute("INSERT INTO validacao (id_item, etapa) VALUES (NULL, 'tecnica')")
+        con.execute("ALTER TABLE validacao DROP COLUMN atribuido_a")
+        con.commit()
+        assert banco.migrar(con) == ["validacao.atribuido_a"]
+        assert con.execute(
+            "SELECT atribuido_a FROM validacao").fetchone()["atribuido_a"] is None
+        assert banco.migrar(con) == []          # idempotente
 
 
 # ------------------------------------------------------------------------ P11

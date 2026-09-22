@@ -4,9 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import sqlite3
 from datetime import date, datetime
 
+from .db import ErroIntegridade
 from . import governanca, qualidade, tipos
 
 
@@ -30,8 +30,8 @@ def auditar(con, id_item: int | None, acao: str, usuario: str,
 def gerar_codigo(con, tipo_item: str) -> str:
     prefixo = tipos.tipo(tipo_item).prefixo
     linha = con.execute(
-        "SELECT codigo FROM item_catalogo WHERE codigo LIKE ? "
-        "ORDER BY id_item DESC LIMIT 1", (f"{prefixo}-%",)
+        "SELECT TOP 1 codigo FROM item_catalogo WHERE codigo LIKE ? "
+        "ORDER BY id_item DESC", (f"{prefixo}-%",)
     ).fetchone()
     proximo = 1
     if linha:
@@ -67,14 +67,13 @@ def criar_item(con, *, tipo_item: str, nome: str, descricao: str = "",
         raise RegraDeNegocio(f"já existe {t.rotulo} com o nome '{nome}'")
 
     codigo = gerar_codigo(con, tipo_item)
-    cur = con.execute(
+    id_item = con.execute(
         "INSERT INTO item_catalogo (tipo_item, codigo, nome, descricao, id_pai,"
         " id_squad, criticidade, atributos, criado_por, origem)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?)",
+        " OUTPUT INSERTED.id_item VALUES (?,?,?,?,?,?,?,?,?,?)",
         (tipo_item, codigo, nome.strip(), descricao.strip(), id_pai, id_squad,
          criticidade, json.dumps(atributos or {}, ensure_ascii=False), usuario, origem),
-    )
-    id_item = cur.lastrowid
+    ).fetchone()[0]
     auditar(con, id_item, "criar", usuario, depois={"codigo": codigo, "nome": nome})
     qualidade.registrar(con, id_item)
     con.commit()
@@ -103,7 +102,7 @@ def atualizar_item(con, id_item: int, campos: dict, usuario: str = "sistema") ->
         valores.append(json.dumps(atuais, ensure_ascii=False))
     if not sets:
         return
-    sets.append("atualizado_em = datetime('now')")
+    sets.append("atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120)")
     con.execute(f"UPDATE item_catalogo SET {', '.join(sets)} WHERE id_item = ?",
                 (*valores, id_item))
     auditar(con, id_item, "alterar", usuario, antes=antes, depois=campos)
@@ -114,7 +113,7 @@ def atualizar_item(con, id_item: int, campos: dict, usuario: str = "sistema") ->
 def definir_responsavel(con, id_item: int, id_pessoa: int, papel: str,
                         usuario: str = "sistema") -> None:
     con.execute(
-        "UPDATE responsabilidade SET fim_vigencia = date('now') "
+        "UPDATE responsabilidade SET fim_vigencia = CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23) "
         "WHERE id_item = ? AND papel = ? AND fim_vigencia IS NULL",
         (id_item, papel),
     )
@@ -135,39 +134,48 @@ def relacionar(con, id_origem: int, id_destino: int, tipo_relacao: str,
         raise RegraDeNegocio(f"tipo de relação inválido: {tipo_relacao}")
     if id_origem == id_destino:
         raise RegraDeNegocio("um ativo não se relaciona consigo mesmo")
-    cur = con.execute(
-        "INSERT OR IGNORE INTO relacionamento_ativo "
+    nova = con.execute(
+        "INSERT INTO relacionamento_ativo "
         "(id_origem, id_destino, tipo_relacao, criticidade, mecanismo, origem_evidencia) "
-        "VALUES (?,?,?,?,?,?)",
-        (id_origem, id_destino, tipo_relacao, criticidade, mecanismo, origem_evidencia),
-    )
-    inserida = cur.rowcount == 1
+        "OUTPUT INSERTED.id_relacao "
+        "SELECT ?,?,?,?,?,? WHERE NOT EXISTS ("
+        "  SELECT 1 FROM relacionamento_ativo WHERE id_origem = ? AND id_destino = ?"
+        "   AND tipo_relacao = ?)",
+        (id_origem, id_destino, tipo_relacao, criticidade, mecanismo, origem_evidencia,
+         id_origem, id_destino, tipo_relacao),
+    ).fetchone()
+    inserida = nova is not None
+    id_relacao = nova[0] if inserida else con.execute(
+        "SELECT id_relacao FROM relacionamento_ativo WHERE id_origem = ? "
+        "AND id_destino = ? AND tipo_relacao = ?",
+        (id_origem, id_destino, tipo_relacao)).fetchone()[0]
     if tipo_relacao == "depende_de" and governanca._tem_ciclo(con, id_origem):
         # só apaga se este INSERT realmente criou a linha; se foi ignorado por
-        # duplicidade (relação já existente), cur.lastrowid não se refere a ela
+        # duplicidade, o id devolvido é o da relação que já existia
         if inserida:
             con.execute("DELETE FROM relacionamento_ativo WHERE id_relacao = ?",
-                        (cur.lastrowid,))
+                        (id_relacao,))
         con.commit()
         raise RegraDeNegocio("relação criaria dependência circular entre contextos")
     auditar(con, id_origem, "relacionar", usuario,
             depois={"destino": id_destino, "tipo": tipo_relacao})
     qualidade.registrar(con, id_origem)
     con.commit()
-    return cur.lastrowid
+    return id_relacao
 
 
 def anexar_evidencia(con, id_item: int, tipo_ev: str, titulo: str,
                      url: str | None = None, origem: str = "manual",
                      usuario: str = "sistema") -> int:
-    cur = con.execute(
-        "INSERT INTO evidencia (id_item, tipo, titulo, url, origem) VALUES (?,?,?,?,?)",
+    id_evidencia = con.execute(
+        "INSERT INTO evidencia (id_item, tipo, titulo, url, origem) "
+        "OUTPUT INSERTED.id_evidencia VALUES (?,?,?,?,?)",
         (id_item, tipo_ev, titulo, url, origem),
-    )
+    ).fetchone()[0]
     auditar(con, id_item, "anexar_evidencia", usuario, depois={"titulo": titulo})
     qualidade.registrar(con, id_item)
     con.commit()
-    return cur.lastrowid
+    return id_evidencia
 
 
 # ------------------------------------------------------- revisão e publicação
@@ -210,16 +218,17 @@ def submeter(con, id_item: int, motivo: str = "", usuario: str = "sistema") -> d
         cur = con.execute(
             "INSERT INTO revisao_catalogo "
             "(id_item, numero_revisao, payload, payload_hash, motivo, criado_por) "
+            "OUTPUT INSERTED.id_revisao "
             "SELECT ?, COALESCE(MAX(numero_revisao), 0) + 1, ?, ?, ?, ? "
             "FROM revisao_catalogo WHERE id_item = ?",
             (id_item, bruto, hashlib.sha256(bruto.encode("utf-8")).hexdigest(),
              motivo, usuario, id_item),
         )
-    except sqlite3.IntegrityError:
+    except ErroIntegridade:
         con.rollback()
         raise RegraDeNegocio(
             "conflito ao gerar número de revisão; tente submeter novamente")
-    id_revisao = cur.lastrowid
+    id_revisao = cur.fetchone()[0]
     numero_revisao = con.execute(
         "SELECT numero_revisao FROM revisao_catalogo WHERE id_revisao = ?",
         (id_revisao,),
@@ -227,7 +236,7 @@ def submeter(con, id_item: int, motivo: str = "", usuario: str = "sistema") -> d
     if origem == "rascunho":
         con.execute(
             "UPDATE item_catalogo SET status_ciclo_vida = 'em_validacao',"
-            " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
+            " atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ?", (id_item,))
     ids_validacao = governanca.abrir_validacoes(con, id_item, id_revisao, usuario)
     auditar(con, id_item, "submeter", usuario,
             depois={"revisao": numero_revisao, "motivo": motivo})
@@ -281,7 +290,7 @@ def decidir_validacao(con, id_validacao: int, aprovar: bool, parecer: str,
 
     con.execute(
         "UPDATE validacao SET situacao = ?, parecer = ?, responsavel = ?,"
-        " concluido_em = datetime('now') WHERE id_validacao = ?",
+        " concluido_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_validacao = ?",
         ("aprovada" if aprovar else "rejeitada", parecer, usuario, id_validacao),
     )
     id_item = val["id_item"]
@@ -290,14 +299,14 @@ def decidir_validacao(con, id_validacao: int, aprovar: bool, parecer: str,
 
     if not aprovar:
         con.execute(
-            "UPDATE validacao SET situacao = 'rejeitada', concluido_em = datetime('now'),"
+            "UPDATE validacao SET situacao = 'rejeitada', concluido_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120),"
             " parecer = 'Cancelada por rejeição em outra etapa' "
             "WHERE id_item = ? AND id_revisao = ? AND situacao = 'pendente'",
             (id_item, val["id_revisao"]),
         )
         con.execute(
             "UPDATE item_catalogo SET status_ciclo_vida = 'rascunho',"
-            " atualizado_em = datetime('now') WHERE id_item = ? "
+            " atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ? "
             "AND status_ciclo_vida = 'em_validacao'", (id_item,))
         _avisar_autor_da_rejeicao(con, id_item, val, parecer, usuario)
         con.commit()
@@ -365,12 +374,12 @@ def _avisar_consumidores(con, id_item: int, usuario: str) -> None:
 
 def publicar(con, id_item: int, id_revisao: int, usuario: str = "sistema") -> None:
     con.execute(
-        "UPDATE revisao_catalogo SET publicada_em = datetime('now') WHERE id_revisao = ?",
+        "UPDATE revisao_catalogo SET publicada_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_revisao = ?",
         (id_revisao,))
     con.execute(
         "UPDATE item_catalogo SET status_ciclo_vida = 'publicado', revisao_atual = ?,"
-        " inicio_vigencia = COALESCE(inicio_vigencia, date('now')),"
-        " atualizado_em = datetime('now') WHERE id_item = ?",
+        " inicio_vigencia = COALESCE(inicio_vigencia, CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23)),"
+        " atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ?",
         (id_revisao, id_item))
     auditar(con, id_item, "publicar", usuario, depois={"id_revisao": id_revisao})
     qualidade.registrar(con, id_item)
@@ -386,7 +395,7 @@ def abrir_revisao(con, id_item: int, usuario: str = "sistema") -> None:
         raise RegraDeNegocio("só é possível revisar item publicado")
     con.execute(
         "UPDATE item_catalogo SET status_ciclo_vida = 'em_revisao',"
-        " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
+        " atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ?", (id_item,))
     auditar(con, id_item, "abrir_revisao", usuario)
     con.commit()
 
@@ -408,10 +417,10 @@ def descontinuar(con, id_item: int, motivo: str, usuario: str = "sistema",
                 "motivo": "Existem consumidores ativos de alta criticidade não tratados"}
     con.execute(
         "UPDATE item_catalogo SET status_ciclo_vida = 'descontinuado',"
-        " fim_vigencia = date('now'), atualizado_em = datetime('now') WHERE id_item = ?",
+        " fim_vigencia = CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23), atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ?",
         (id_item,))
     con.execute(
-        "UPDATE relacionamento_ativo SET fim_vigencia = date('now') "
+        "UPDATE relacionamento_ativo SET fim_vigencia = CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23) "
         "WHERE (id_origem = ? OR id_destino = ?) AND fim_vigencia IS NULL",
         (id_item, id_item))
     auditar(con, id_item, "descontinuar", usuario,
@@ -427,7 +436,7 @@ def alterar_status(con, id_item: int, novo: str, usuario: str = "sistema") -> No
     if novo not in governanca.TRANSICOES.get(atual, set()):
         raise RegraDeNegocio(f"transição inválida: {atual} → {novo}")
     con.execute(
-        "UPDATE item_catalogo SET status_ciclo_vida = ?, atualizado_em = datetime('now') "
+        "UPDATE item_catalogo SET status_ciclo_vida = ?, atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) "
         "WHERE id_item = ?", (novo, id_item))
     auditar(con, id_item, "transicao", usuario, antes={"status": atual}, depois={"status": novo})
     con.commit()
@@ -481,8 +490,8 @@ def _filtro_busca(termo: str = "", tipo_item: str = "", status: str = "",
 
 _SELECT_BUSCA = (
     "SELECT i.*, s.nome AS squad,"
-    " (SELECT q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item"
-    "   ORDER BY q.id_qualidade DESC LIMIT 1) AS score,"
+    " (SELECT TOP 1 q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item"
+    "   ORDER BY q.id_qualidade DESC) AS score,"
     " p.nome AS pai_nome"
     " FROM item_catalogo i"
     " LEFT JOIN squad s ON s.id_squad = i.id_squad"
@@ -496,7 +505,7 @@ def buscar(con, limite: int = 200, ordenar: str = ORDEM_PADRAO,
     ordem = ORDENACOES.get(ordenar, ORDENACOES[ORDEM_PADRAO])
     direcao = " DESC" if descendente else ""
     return [dict(l) for l in con.execute(
-        f"{_SELECT_BUSCA} {onde} ORDER BY {ordem}{direcao} LIMIT ?",
+        f"{_SELECT_BUSCA} {onde} ORDER BY {ordem}{direcao} OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY",
         [*params, limite])]
 
 
@@ -518,8 +527,8 @@ def buscar_pagina(con, pagina: int = 1, por_pagina: int = 50,
     ordem = ORDENACOES.get(ordenar, ORDENACOES[ORDEM_PADRAO])
     direcao = " DESC" if descendente else ""
     itens = [dict(l) for l in con.execute(
-        f"{_SELECT_BUSCA} {onde} ORDER BY {ordem}{direcao} LIMIT ? OFFSET ?",
-        [*params, por_pagina, (pagina - 1) * por_pagina])]
+        f"{_SELECT_BUSCA} {onde} ORDER BY {ordem}{direcao} OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        [*params, (pagina - 1) * por_pagina, por_pagina])]
     return {"itens": itens, "total": total, "pagina": pagina, "paginas": paginas,
             "por_pagina": por_pagina,
             "primeiro": 0 if not total else (pagina - 1) * por_pagina + 1,
@@ -534,7 +543,7 @@ def trilha(con, id_item: int) -> list[dict]:
     uma ida ao banco por nível.
     """
     linhas = con.execute(
-        "WITH RECURSIVE sobe(id_item, id_pai, nome, tipo_item, nivel) AS ("
+        "WITH sobe(id_item, id_pai, nome, tipo_item, nivel) AS ("
         "  SELECT id_item, id_pai, nome, tipo_item, 0"
         "    FROM item_catalogo WHERE id_item = ?"
         "  UNION ALL"
@@ -581,8 +590,8 @@ def visao_360(con, id_item: int) -> dict:
     validacoes = [dict(l) for l in con.execute(
         "SELECT * FROM validacao WHERE id_item = ? ORDER BY id_validacao DESC", (id_item,))]
     auditoria = [dict(l) for l in con.execute(
-        "SELECT * FROM auditoria_evento WHERE id_item = ? "
-        "ORDER BY id_evento DESC LIMIT 30", (id_item,))]
+        "SELECT TOP 30 * FROM auditoria_evento WHERE id_item = ? "
+        "ORDER BY id_evento DESC", (id_item,))]
 
     return {
         "item": item,
@@ -639,7 +648,7 @@ def indicadores(con) -> dict:
         "AND r.tipo_relacao = 'implementa' AND r.fim_vigencia IS NULL)")
     pendencias = escalar("SELECT COUNT(*) FROM validacao WHERE situacao = 'pendente'")
     vencidas = escalar(
-        "SELECT COUNT(*) FROM validacao WHERE situacao = 'pendente' AND prazo < datetime('now')")
+        "SELECT COUNT(*) FROM validacao WHERE situacao = 'pendente' AND prazo < CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120)")
     dominios = escalar(
         "SELECT COUNT(*) FROM item_catalogo WHERE tipo_item = 'dominio' "
         "AND status_ciclo_vida IN ('publicado','em_revisao')")
@@ -680,7 +689,8 @@ def cobertura_por_dominio(con) -> list[dict]:
         JOIN item_catalogo sub ON sub.id_pai = d.id_item
         LEFT JOIN cap ON cap.id_sub = sub.id_item
         WHERE d.tipo_item = 'dominio'
-        GROUP BY d.id_item ORDER BY d.nome
+        GROUP BY d.id_item, d.nome
+        ORDER BY d.nome
     """).fetchall()
     saida = []
     for l in linhas:
@@ -711,7 +721,7 @@ def pendencias_prioritarias(con) -> list[dict]:
          {"tipo_item": "repositorio"}),
         ("Validação com SLA vencido",
          "SELECT COUNT(*) FROM validacao WHERE situacao = 'pendente' "
-         "AND prazo < datetime('now')", {"destino": "validacoes"}),
+         "AND prazo < CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120)", {"destino": "validacoes"}),
         ("Dependência crítica sem evidência",
          "SELECT COUNT(*) FROM relacionamento_ativo r WHERE r.tipo_relacao = 'depende_de' "
          "AND r.criticidade IN ('alta','critica') AND r.fim_vigencia IS NULL "
@@ -725,11 +735,16 @@ def gerar_snapshot(con, competencia: str | None = None) -> None:
     """Materializa indicadores do mês para a camada analítica."""
     competencia = competencia or date.today().strftime("%Y-%m")
     for chave, valor in indicadores(con).items():
-        con.execute(
-            "INSERT INTO snapshot_indicador (competencia, indicador, valor) VALUES (?,?,?) "
-            "ON CONFLICT(competencia, indicador, recorte) DO UPDATE SET valor = excluded.valor,"
-            " gerado_em = datetime('now')",
-            (competencia, chave, float(valor)))
+        # sem upsert de uma instrução: atualiza, e insere se nada foi atualizado
+        atualizadas = con.execute(
+            "UPDATE snapshot_indicador SET valor = ?,"
+            " gerado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) "
+            "WHERE competencia = ? AND indicador = ? AND recorte = 'geral'",
+            (float(valor), competencia, chave)).rowcount
+        if not atualizadas:
+            con.execute(
+                "INSERT INTO snapshot_indicador (competencia, indicador, valor) "
+                "VALUES (?,?,?)", (competencia, chave, float(valor)))
     con.commit()
 
 
@@ -941,7 +956,7 @@ def grafo_catalogo(con, id_dominio: int | None = None,
     """Exibe todos os ativos ou apenas os descendentes de um recorte."""
     def descendentes(raiz: int) -> set[int]:
         return {linha["id_item"] for linha in con.execute(
-            "WITH RECURSIVE descendentes(id_item) AS ("
+            "WITH descendentes(id_item) AS ("
             "SELECT id_item FROM item_catalogo WHERE id_item = ? "
             "UNION ALL SELECT i.id_item FROM item_catalogo i "
             "JOIN descendentes d ON i.id_pai = d.id_item) "
@@ -1029,12 +1044,12 @@ def triar(con, ids: list[int], acao: str, usuario: str = "sistema") -> dict:
             continue
         if acao == "aceitar":
             con.execute("UPDATE item_catalogo SET origem = 'manual',"
-                        " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
+                        " atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ?", (id_item,))
         else:
             if linha["status_ciclo_vida"] not in ("rascunho", "em_validacao"):
                 continue
             con.execute("UPDATE item_catalogo SET status_ciclo_vida = 'arquivado',"
-                        " atualizado_em = datetime('now') WHERE id_item = ?", (id_item,))
+                        " atualizado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) WHERE id_item = ?", (id_item,))
         auditar(con, id_item, f"triagem_{acao}", usuario, origem="descobertas")
         tratados += 1
     con.commit()
@@ -1076,8 +1091,8 @@ def minha_mesa(con, usuario: str) -> dict:
         return [dict(l) for l in con.execute(
             "SELECT i.id_item, i.codigo, i.nome, i.tipo_item, i.status_ciclo_vida,"
             " i.criticidade, i.atualizado_em,"
-            " (SELECT q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item"
-            "   ORDER BY q.id_qualidade DESC LIMIT 1) AS score"
+            " (SELECT TOP 1 q.score_total FROM qualidade_catalogo q WHERE q.id_item = i.id_item"
+            "   ORDER BY q.id_qualidade DESC) AS score"
             " FROM item_catalogo i WHERE i.criado_por = ?"
             f" AND i.status_ciclo_vida IN ({marcas})"
             " ORDER BY i.atualizado_em DESC", (usuario, *status))]

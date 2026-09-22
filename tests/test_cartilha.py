@@ -23,11 +23,11 @@ CSS = Path(__file__).resolve().parent.parent / "catalogo" / "static" / "estilo.c
 
 
 @pytest.fixture()
-def app(tmp_path):
-    aplicacao = create_app({"DATABASE": str(tmp_path / "cartilha.db"), "TESTING": True,
+def app(base_de_testes):
+    aplicacao = create_app({"DATABASE": base_de_testes, "TESTING": True,
                             "SECRET_KEY": "teste"})
     with aplicacao.app_context():
-        banco.init_db()
+        banco.limpar_tudo(banco.get_db())
         governanca.semear_politicas(banco.get_db())
     return aplicacao
 

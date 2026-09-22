@@ -10,10 +10,9 @@ from catalogo import create_app, db as banco, governanca, qualidade, servicos  #
 
 
 @pytest.fixture()
-def con(tmp_path):
-    caminho = tmp_path / "teste.db"
-    conexao = banco.conectar(str(caminho))
-    banco.criar_schema(conexao)
+def con(base_de_testes):
+    conexao = banco.conectar(base_de_testes)
+    banco.limpar_tudo(conexao)
     governanca.semear_politicas(conexao)
     conexao.execute("INSERT INTO squad (codigo, nome) VALUES ('SQ-1', 'Squad Teste')")
     conexao.execute(
@@ -114,7 +113,7 @@ def test_rejeicao_devolve_para_rascunho(con):
     servicos.relacionar(con, app_id, cap, "implementa")
     servicos.submeter(con, cap, "tentativa")
     val = con.execute(
-        "SELECT id_validacao FROM validacao WHERE id_item = ? LIMIT 1", (cap,)).fetchone()
+        "SELECT TOP 1 id_validacao FROM validacao WHERE id_item = ?", (cap,)).fetchone()
     servicos.decidir_validacao(con, val["id_validacao"], False, "faltou evidência")
     status = con.execute("SELECT status_ciclo_vida FROM item_catalogo WHERE id_item = ?",
                          (cap,)).fetchone()["status_ciclo_vida"]
@@ -160,11 +159,10 @@ def test_score_de_qualidade_sobe_com_cadastro_completo(con):
     assert final > inicial
 
 
-def test_api_lista_itens(tmp_path):
-    caminho = tmp_path / "api.db"
-    app = create_app({"DATABASE": str(caminho), "TESTING": True})
+def test_api_lista_itens(base_de_testes):
+    app = create_app({"DATABASE": base_de_testes, "TESTING": True})
     with app.app_context():
-        banco.init_db()
+        banco.limpar_tudo(banco.get_db())
         governanca.semear_politicas(banco.get_db())
         servicos.criar_item(banco.get_db(), tipo_item="dominio", nome="Garantias",
                             descricao="Domínio", atributos={"visao": "Reduzir risco"})
