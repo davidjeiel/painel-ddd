@@ -22,7 +22,7 @@ PESOS = {
 def _papeis(con, id_item: int) -> set[str]:
     linhas = con.execute(
         "SELECT papel FROM responsabilidade "
-        "WHERE id_item = ? AND (fim_vigencia IS NULL OR fim_vigencia >= date('now'))",
+        "WHERE id_item = ? AND (fim_vigencia IS NULL OR fim_vigencia >= CONVERT(NVARCHAR(10), SYSUTCDATETIME(), 23))",
         (id_item,),
     ).fetchall()
     return {l["papel"] for l in linhas}
@@ -107,9 +107,9 @@ def avaliar(con, id_item: int) -> dict:
 
     # ------------------------------------------------------------ evidência
     minima = con.execute(
-        "SELECT evidencia_minima FROM politica_governanca "
+        "SELECT TOP 1 evidencia_minima FROM politica_governanca "
         "WHERE tipo_item = ? AND criticidade IN (?, '*') "
-        "ORDER BY criticidade DESC LIMIT 1",
+        "ORDER BY criticidade DESC",
         (item["tipo_item"], item["criticidade"]),
     ).fetchone()
     minima = minima["evidencia_minima"] if minima else 0
@@ -125,9 +125,9 @@ def avaliar(con, id_item: int) -> dict:
 
     # -------------------------------------------------------- temporalidade
     politica_dias = con.execute(
-        "SELECT periodicidade_revisao_dias FROM politica_governanca "
+        "SELECT TOP 1 periodicidade_revisao_dias FROM politica_governanca "
         "WHERE tipo_item = ? AND criticidade IN (?, '*') "
-        "ORDER BY criticidade DESC LIMIT 1",
+        "ORDER BY criticidade DESC",
         (item["tipo_item"], item["criticidade"]),
     ).fetchone()
     dias = politica_dias["periodicidade_revisao_dias"] if politica_dias else 180
@@ -193,9 +193,9 @@ def proxima_revisao(con, id_item: int) -> str | None:
     # mesmo padrão de filtro usado em avaliar(): a política específica da
     # criticidade do item vence a política '*' (curinga), nunca o contrário
     pol = con.execute(
-        "SELECT periodicidade_revisao_dias d FROM politica_governanca "
+        "SELECT TOP 1 periodicidade_revisao_dias d FROM politica_governanca "
         "WHERE tipo_item = ? AND criticidade IN (?, '*') "
-        "ORDER BY criticidade DESC LIMIT 1",
+        "ORDER BY criticidade DESC",
         (item["tipo_item"], item["criticidade"]),
     ).fetchone()
     if not pol:

@@ -18,12 +18,12 @@ from catalogo import create_app, db as banco, governanca, servicos  # noqa: E402
 
 
 @pytest.fixture()
-def app(tmp_path):
-    aplicacao = create_app({"DATABASE": str(tmp_path / "jornada.db"), "TESTING": True,
+def app(base_de_testes):
+    aplicacao = create_app({"DATABASE": base_de_testes, "TESTING": True,
                             "SECRET_KEY": "teste"})
     with aplicacao.app_context():
-        banco.init_db()
         con = banco.get_db()
+        banco.limpar_tudo(con)
         governanca.semear_politicas(con)
         con.execute("INSERT INTO squad (codigo, nome) VALUES ('SQ-1', 'Squad Crédito')")
         con.execute("INSERT INTO pessoa (matricula, nome, perfil) "

@@ -12,10 +12,10 @@ from catalogo import acesso
 def criar_pessoa(con, nome: str, login: str, papel: str = "admin",
                  escopo_tipo: str = "global", escopo_id: int | None = None,
                  perfil: str = "curador") -> int:
-    cur = con.execute(
-        "INSERT INTO pessoa (matricula, nome, perfil, login) VALUES (?,?,?,?)",
-        (login.upper(), nome, perfil, login))
-    id_pessoa = cur.lastrowid
+    id_pessoa = con.execute(
+        "INSERT INTO pessoa (matricula, nome, perfil, login) "
+        "OUTPUT INSERTED.id_pessoa VALUES (?,?,?,?)",
+        (login.upper(), nome, perfil, login)).fetchone()[0]
     con.commit()
     if papel:
         acesso.conceder(con, id_pessoa, papel, escopo_tipo, escopo_id, "teste")

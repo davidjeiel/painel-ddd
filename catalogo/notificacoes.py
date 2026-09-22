@@ -76,11 +76,12 @@ def registrar(con, id_pessoa: int, tipo: str, titulo: str, corpo: str = "",
     if chave_unica and con.execute(
             "SELECT 1 FROM notificacao WHERE chave_unica = ?", (chave_unica,)).fetchone():
         return None
-    cur = con.execute(
+    return con.execute(
         "INSERT INTO notificacao (id_pessoa, tipo, id_item, id_validacao, titulo,"
-        " corpo, url, chave_unica, canal) VALUES (?,?,?,?,?,?,?,?,?)",
-        (id_pessoa, tipo, id_item, id_validacao, titulo, corpo, url, chave_unica, canal))
-    return cur.lastrowid
+        " corpo, url, chave_unica, canal) OUTPUT INSERTED.id_notificacao "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (id_pessoa, tipo, id_item, id_validacao, titulo, corpo, url, chave_unica,
+         canal)).fetchone()[0]
 
 
 def para_muitos(con, pessoas: list[dict], tipo: str, titulo: str, corpo: str = "",
@@ -107,7 +108,7 @@ def caixa(con, id_pessoa: int, apenas_nao_lidas: bool = False,
     params: list = [id_pessoa]
     if apenas_nao_lidas:
         sql += " AND n.lido_em IS NULL"
-    sql += " ORDER BY n.criado_em DESC, n.id_notificacao DESC LIMIT ?"
+    sql += " ORDER BY n.criado_em DESC, n.id_notificacao DESC OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY"
     params.append(limite)
     return [dict(l) for l in con.execute(sql, params)]
 
@@ -119,14 +120,14 @@ def nao_lidas(con, id_pessoa: int) -> int:
 
 
 def marcar_lida(con, id_notificacao: int, id_pessoa: int) -> None:
-    con.execute("UPDATE notificacao SET lido_em = datetime('now') "
+    con.execute("UPDATE notificacao SET lido_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) "
                 "WHERE id_notificacao = ? AND id_pessoa = ? AND lido_em IS NULL",
                 (id_notificacao, id_pessoa))
     con.commit()
 
 
 def marcar_todas_lidas(con, id_pessoa: int) -> int:
-    cur = con.execute("UPDATE notificacao SET lido_em = datetime('now') "
+    cur = con.execute("UPDATE notificacao SET lido_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) "
                       "WHERE id_pessoa = ? AND lido_em IS NULL", (id_pessoa,))
     con.commit()
     return cur.rowcount
@@ -162,14 +163,14 @@ def despachar(con, limite: int = 200) -> dict:
     """
     pendentes = [dict(l) for l in con.execute(
         "SELECT * FROM notificacao WHERE enviado_em IS NULL "
-        "ORDER BY id_notificacao LIMIT ?", (limite,))]
+        "ORDER BY id_notificacao OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY", (limite,))]
     por_canal: dict[str, int] = {}
     ignoradas = 0
     for n in pendentes:
         if n["canal"] not in CANAIS_DISPONIVEIS:
             ignoradas += 1
             continue
-        con.execute("UPDATE notificacao SET enviado_em = datetime('now') "
+        con.execute("UPDATE notificacao SET enviado_em = CONVERT(NVARCHAR(19), SYSUTCDATETIME(), 120) "
                     "WHERE id_notificacao = ?", (n["id_notificacao"],))
         por_canal[n["canal"]] = por_canal.get(n["canal"], 0) + 1
     con.commit()

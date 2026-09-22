@@ -72,11 +72,14 @@ PESSOAS = [
 def carregar(con) -> dict:
     ids_squad = {}
     for codigo, nome, descricao in SQUADS:
-        cur = con.execute(
-            "INSERT INTO squad (codigo, nome, descricao) VALUES (?,?,?) "
-            "ON CONFLICT(codigo) DO UPDATE SET nome = excluded.nome, "
-            "descricao = excluded.descricao, ativo = 1",
-            (codigo, nome, descricao))
+        # sem upsert de uma instrução: atualiza, e insere se nada foi atualizado
+        atualizadas = con.execute(
+            "UPDATE squad SET nome = ?, descricao = ?, ativo = 1 WHERE codigo = ?",
+            (nome, descricao, codigo)).rowcount
+        if not atualizadas:
+            con.execute(
+                "INSERT INTO squad (codigo, nome, descricao) VALUES (?,?,?)",
+                (codigo, nome, descricao))
         ids_squad[codigo] = con.execute(
             "SELECT id_squad FROM squad WHERE codigo = ?", (codigo,)).fetchone()[0]
     for legado, codigo in SQUAD_PILOTO.items():
@@ -86,11 +89,12 @@ def carregar(con) -> dict:
     for matricula, nome, email, perfil, squad in PESSOAS:
         squad = SQUAD_PILOTO[squad]
         login = email.split("@")[0]
-        cur = con.execute(
-            "INSERT OR IGNORE INTO pessoa (matricula, nome, email, perfil, id_squad,"
-            " login) VALUES (?,?,?,?,?,?)",
-            (matricula, nome, email, perfil, ids_squad[squad], login))
-        ids_pessoa[matricula] = cur.lastrowid or con.execute(
+        con.execute(
+            "INSERT INTO pessoa (matricula, nome, email, perfil, id_squad, login) "
+            "SELECT ?,?,?,?,?,? WHERE NOT EXISTS ("
+            "  SELECT 1 FROM pessoa WHERE matricula = ?)",
+            (matricula, nome, email, perfil, ids_squad[squad], login, matricula))
+        ids_pessoa[matricula] = con.execute(
             "SELECT id_pessoa FROM pessoa WHERE matricula = ?", (matricula,)).fetchone()[0]
     con.commit()
 
@@ -357,12 +361,14 @@ def carregar(con) -> dict:
     for i in range(5, 0, -1):
         mes = (hoje - timedelta(days=30 * i)).strftime("%Y-%m")
         base = 58 + (5 - i) * 4
-        con.execute(
-            "INSERT OR REPLACE INTO snapshot_indicador (competencia, indicador, valor) "
-            "VALUES (?,?,?)", (mes, "cobertura", float(base)))
-        con.execute(
-            "INSERT OR REPLACE INTO snapshot_indicador (competencia, indicador, valor) "
-            "VALUES (?,?,?)", (mes, "qualidade_media", float(base - 6)))
+        for indicador, valor in (("cobertura", float(base)),
+                                 ("qualidade_media", float(base - 6))):
+            con.execute(
+                "DELETE FROM snapshot_indicador WHERE competencia = ? "
+                "AND indicador = ? AND recorte = 'geral'", (mes, indicador))
+            con.execute(
+                "INSERT INTO snapshot_indicador (competencia, indicador, valor) "
+                "VALUES (?,?,?)", (mes, indicador, valor))
     con.commit()
     servicos.gerar_snapshot(con)
 
