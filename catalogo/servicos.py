@@ -689,7 +689,8 @@ def cobertura_por_dominio(con) -> list[dict]:
         JOIN item_catalogo sub ON sub.id_pai = d.id_item
         LEFT JOIN cap ON cap.id_sub = sub.id_item
         WHERE d.tipo_item = 'dominio'
-        GROUP BY d.id_item ORDER BY d.nome
+        GROUP BY d.id_item, d.nome
+        ORDER BY d.nome
     """).fetchall()
     saida = []
     for l in linhas:
